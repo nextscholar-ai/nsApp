@@ -1,0 +1,17 @@
+app/_pycache_/*
+.venv/
+__pycache__/
+routers/_pycache_/*
+.env/* 
+venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+.mypy_cache/
+.vscode/
+.idea/
+logs/
+uploads/
+.coverage
+htmlcov/
