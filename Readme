@@ -1,1 +1,81 @@
-Test
+CREATE  .env FILE IN nsAPP FOLDER
+ADD THIS CODE 
+# ============================================================
+# Application
+# ============================================================
+APP_NAME=Student ERP Backend
+APP_VERSION=1.0.0
+APP_ENV=production
+DEBUG=false
+
+# ============================================================
+# Database (PostgreSQL)
+# ============================================================
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_NAME=ENTER YOUR POSTGRESQL DATABASE NAME 
+DATABASE_USER=postgres
+DATABASE_PASSWORD=ENTER YOUR POSTGRESQL PASSWORD
+DATABASE_URL=postgresql+psycopg://postgres:ENTER YOUR POSTGRESQL PASSWORD@localhost:5432/ENTER YOUR POSTGRESQL DATABASE NAME 
+
+# ============================================================
+# Auth / JWT
+# ============================================================
+# Generate a strong secret, e.g.: python3 -c "import secrets; print(secrets.token_hex(32))"
+SECRET_KEY=3eb9a73e95626a5774187f344f287da6965457e495b045eed6d93b2275dfb95f
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# ============================================================
+# Uploads / Logging
+# ============================================================
+UPLOAD_DIR=uploads
+LOG_LEVEL=INFO
+
+# ============================================================
+# Email (SMTP) - used by app/email_services.py
+# ============================================================
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SMTP_EMAIL=ENTER YOUR EMAIL
+SMTP_PASSWORD=ENETER YOUR 2 STEP VARIFICATION APP PASSWORD
+
+# Frontend URL - used to build password reset / verification links
+FRONTEND_URL=http://localhost:3000
+
+
+
+
+
+
+
+
+1.Install PostgreSQL and set a secure password during setup.
+2.enetr  this password to in postgresql.
+3.then create your database.
+4.connect your application using the same password and your new database name.
+
+
+1.ADD THIS CODE IN .env FILE 
+ADD YOUR POSTGRESQL PASSWORD  IN BOTH LINE 
+DATABASE_PASSWORD=ENTER YOUR POSTGRESQL PASSWORD
+DATABASE_URL=postgresql+psycopg://postgres:ENTER YOUR POSTGRESQL PASSWORD@localhost:5432/ENTER YOUR POSTGRESQL DATABASE NAME 
+
+
+
+2.ADD YOUR DATABASE NAME IN BOTH LINE 
+DATABASE_NAME=ENTER YOUR POSTGRESQL DATABASE NAME 
+DATABASE_URL=postgresql+psycopg://postgres:ENTER YOUR POSTGRESQL PASSWORD@localhost:5432/ENTER YOUR POSTGRESQL DATABASE NAME 
+
+
+3.ADD EMAIL AND 2 STEP VARIFICATION CODE IN 
+SMTP_EMAIL=ENTER YOUR EMAIL
+SMTP_PASSWORD=ENETER YOUR 2 STEP VARIFICATION APP PASSWORD
+
+
+
+1.CREATE ENVIRONMENT AND ACTIVATE ENVIRONMENT 
+2.INSTALL REQUIREMENTS 
+3.UPDATE SCRIPTS/SEED_ACCOUNTS.PY FILE DATA 
+4.RUN SCRIPTS/SEED_ACCOUNTS.PY FILE 
+5.RUN MAIN FILE 
