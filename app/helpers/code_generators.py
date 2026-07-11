@@ -9,7 +9,7 @@ from app.core.constants import (
     STUDENT_PREFIX, TEACHER_PREFIX, ADMIN_PREFIX, MATERIAL_PREFIX,
     NOTICE_PREFIX, ASSIGNMENT_PREFIX, EXAM_PREFIX,
     FEE_PREFIX, RECEIPT_PREFIX, CHAT_PREFIX,
-    TIMETABLE_PREFIX, AVAILABILITY_PREFIX
+    TIMETABLE_PREFIX, AVAILABILITY_PREFIX, REGISTRATION_PREFIX
 )
 
 def generate_uuid():
@@ -81,3 +81,10 @@ def generate_subject_code(subject_name: str, class_name: str):
         prefix = "".join(word[0] for word in words)[:2]
     digits = "".join(filter(str.isdigit, class_name))
     return f"{prefix}{digits}"
+
+
+def generate_registration_number(year: int, sequence: int):
+    """e.g. REG-2026-00001. `sequence` must be caller-computed (see
+    RegistrationNumberService for the collision-safe generation loop) —
+    this function only formats it."""
+    return f"{REGISTRATION_PREFIX}-{year}-{sequence:05d}"

@@ -106,7 +106,7 @@ class StudentProfileBase(BaseSchema):
     date_of_birth: Optional[date] = None
     blood_group: Optional[str] = Field(None, max_length=10)
     profile_photo: Optional[str] = None
-    school_name: str = Field(..., max_length=255)
+    school_name: str = Field("", max_length=255)
     school_address: Optional[str] = None
     medium: Optional[str] = Field(None, max_length=100)
     board: Optional[str] = Field(None, max_length=100)
@@ -131,6 +131,8 @@ class StudentProfileCreate(StudentProfileBase):
     user_id: int
     student_id: str
     admission_number: Optional[str] = None
+    # registration_number is intentionally NOT accepted on create —
+    # it's always system-generated (see RegistrationNumberService).
 
 
 # ============================================================
@@ -149,6 +151,7 @@ class StudentProfileResponse(StudentProfileBase, TimestampSchema, ActiveSchema, 
     student_id: str
     user_id: int
     admission_number: Optional[str] = None
+    registration_number: Optional[str] = None
     user: Optional[UserMinResponse] = None
 
 

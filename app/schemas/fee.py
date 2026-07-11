@@ -38,7 +38,7 @@ from .teacher_student_links import StudentClassResponse
 # ============================================================
 
 class FeeBase(BaseSchema):
-    fee_id: str = Field(..., max_length=30)
+    fee_id: Optional[str] = Field(None, max_length=30)
     fee_month: int = Field(..., ge=1, le=12)
     fee_year: int = Field(..., ge=2000, le=2100)
     total_amount: Decimal

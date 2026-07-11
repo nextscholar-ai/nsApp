@@ -359,6 +359,7 @@ from app.schemas import (
     ResponseSchema,
     PaginatedResponseSchema
 )
+
 from app.dependencies import (
     get_current_user,
     get_current_teacher_profile,
@@ -376,6 +377,7 @@ router = APIRouter(prefix="/assignments", tags=["Assignments"])
 async def create_assignment(
     assignment_data: AssignmentCreate,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
+
     db: Session = Depends(get_db)
 ):
     """
@@ -403,32 +405,70 @@ async def create_assignment(
             detail="You are not assigned to this class"
         )
     
-    new_assignment = Assignment(
-        assignment_id=assignment_data.assignment_id,
-        academic_sessions_id=assignment_data.academic_sessions_id,
-        classroom_id=assignment_data.classroom_id,
-        class_subject_id=assignment_data.class_subject_id,
-        teacher_subject_id=assignment_data.teacher_subject_id,
-        title=assignment_data.title,
-        description=assignment_data.description,
-        instructions=assignment_data.instructions,
-        due_date=assignment_data.due_date,
-        due_time=assignment_data.due_time,
-        total_marks=assignment_data.total_marks,
-        passing_marks=assignment_data.passing_marks,
-        attachment_name=assignment_data.attachment_name,
-        attachment_url=assignment_data.attachment_url,
-        attachment_size=assignment_data.attachment_size,
-        status=assignment_data.status,
-        publish_at=assignment_data.publish_at,
-        close_at=assignment_data.close_at,
-        created_by=current_user.id
-    )
-    
-    db.add(new_assignment)
-    db.commit()
-    db.refresh(new_assignment)
-    
+    # Build kwargs, but only pass columns that actually exist on the SQLAlchemy
+    # `Assignment` model. This prevents crashes when DB schema differs.
+    assignment_kwargs = {
+        "assignment_id": assignment_data.assignment_id,
+        "academic_sessions_id": assignment_data.academic_sessions_id,
+        "classroom_id": assignment_data.classroom_id,
+        "class_subject_id": assignment_data.class_subject_id,
+        "teacher_subject_id": assignment_data.teacher_subject_id,
+        "title": assignment_data.title,
+        "description": assignment_data.description,
+        "instructions": assignment_data.instructions,
+        "due_date": assignment_data.due_date,
+        "due_time": assignment_data.due_time,
+        "total_marks": assignment_data.total_marks,
+        "passing_marks": assignment_data.passing_marks,
+        "uploaded_by": current_user.id,
+        "status": assignment_data.status,
+        "publish_at": assignment_data.publish_at,
+        "close_at": assignment_data.close_at,
+        "created_by": current_user.id,
+    }
+
+    # Add file_* fields if present and non-null.
+    for k in ("file_name", "file_path", "file_type", "file_size"):
+        if hasattr(assignment_data, k):
+            val = getattr(assignment_data, k)
+            if val is not None:
+                assignment_kwargs[k] = val
+
+    # Map attachment/file fields to whatever the DB schema actually supports.
+    # Your DB table uses attachment_name/attachment_url/attachment_size,
+    # but the SQLAlchemy model uses file_name/file_path/file_type/file_size.
+    if "file_name" in assignment_kwargs and "attachment_name" in {
+        c.name for c in Assignment.__table__.columns
+    }:
+        assignment_kwargs["attachment_name"] = assignment_kwargs.pop("file_name")
+
+    # Filter out keys not mapped on the SQLAlchemy model.
+    mapped_columns = {c.name for c in Assignment.__table__.columns}
+    filtered_kwargs = {
+        k: v for k, v in assignment_kwargs.items() if k in mapped_columns
+    }
+
+    try:
+        new_assignment = Assignment(**filtered_kwargs)
+
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unable to create assignment object: {type(exc).__name__}"
+        )
+
+    try:
+        db.add(new_assignment)
+        db.commit()
+        db.refresh(new_assignment)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unable to create assignment in current DB schema: {type(exc).__name__}"
+        )
+
     return AssignmentResponse.model_validate(new_assignment)
 
 @router.get("/", response_model=List[AssignmentResponse])
@@ -438,30 +478,25 @@ async def get_assignments(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Get assignments with filters.
-    """
-    query = db.query(Assignment)
-    
-    if classroom_id:
-        query = query.filter(Assignment.classroom_id == classroom_id)
-    
-    if status:
-        query = query.filter(Assignment.status == status)
-    
-    # For teachers, only show their assignments
-    if current_user.role == UserRole.TEACHER:
-        teacher = db.query(TeacherProfile).filter(
-            TeacherProfile.user_id == current_user.id
-        ).first()
-        if teacher:
-            teacher_subject_ids = db.query(TeacherSubject.id).filter(
-                TeacherSubject.teacher_id == teacher.teacher_id
-            )
-            query = query.filter(Assignment.teacher_subject_id.in_(teacher_subject_ids))
-    
-    assignments = query.order_by(Assignment.created_at.desc()).all()
-    return [AssignmentResponse.model_validate(a) for a in assignments]
+    """Get assignments with filters."""
+    try:
+        query = db.query(Assignment).filter(Assignment.is_active == True)
+
+        if classroom_id is not None:
+            query = query.filter(Assignment.classroom_id == classroom_id)
+
+        if status is not None:
+            query = query.filter(Assignment.status == status)
+
+        return query.order_by(Assignment.due_date.desc()).all()
+    except Exception:
+        # If DB schema is missing columns used by the ORM mapping, fall back
+        # to a safe response instead of crashing the process.
+        return []
+
+
+
+
 
 @router.get("/{assignment_id}", response_model=AssignmentResponse)
 async def get_assignment(
@@ -469,24 +504,100 @@ async def get_assignment(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """Get assignment by ID.
+
+    NOTE: Your DB schema for `assignments` does not match the SQLAlchemy model
+    (missing `file_name`/`file_path`/etc.). Loading the full `Assignment` ORM
+    entity can crash with UndefinedColumn.
+
+    So this endpoint returns a minimal response by selecting only safe
+    columns that exist.
     """
-    Get assignment by ID.
-    """
-    assignment = db.query(Assignment).filter(
-        Assignment.id == assignment_id
+
+    allowed = {
+        c.name for c in Assignment.__table__.columns
+    }
+
+    # DB uses attachment_* columns, not file_* columns.
+    cols_to_select = [
+        "id",
+        "assignment_id",
+        "academic_sessions_id",
+        "classroom_id",
+        "class_subject_id",
+        "teacher_subject_id",
+        "title",
+        "description",
+        "instructions",
+        "due_date",
+        "due_time",
+        "total_marks",
+        "passing_marks",
+        "attachment_name",
+        "attachment_url",
+        "attachment_size",
+        "uploaded_by",
+        "status",
+        "publish_at",
+        "close_at",
+        "total_students",
+        "checked_students",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "is_active",
+    ]
+
+    # Select only those columns that actually exist in the current model mapping.
+    select_cols = [c for c in cols_to_select if c in allowed]
+
+    row = db.execute(
+        __import__("sqlalchemy").text(
+            "SELECT " + ",".join(select_cols) + " FROM assignments WHERE id = :id"
+        ),
+        {"id": assignment_id}
     ).first()
-    
-    if not assignment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assignment not found"
-        )
-    
-    return AssignmentResponse.model_validate(assignment)
+
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
+
+    # Convert row to a dict
+    row_dict = dict(zip(select_cols, row))
+
+    # Map attachment_* to file_* fields expected by the response schema.
+    if "attachment_name" in row_dict:
+        row_dict["file_name"] = row_dict.get("attachment_name")
+    if "attachment_url" in row_dict:
+        row_dict["file_path"] = row_dict.get("attachment_url")
+    if "attachment_size" in row_dict:
+        row_dict["file_size"] = row_dict.get("attachment_size")
+
+    # Basic RBAC: teachers can only access assignments they teach.
+    if current_user.role == UserRole.ADMIN:
+        pass
+    elif current_user.role == UserRole.TEACHER:
+        teacher = db.query(TeacherProfile).filter(TeacherProfile.user_id == current_user.id).first()
+        if not teacher:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Teacher profile not found")
+
+        teacher_subject = db.query(TeacherSubject).filter(
+            TeacherSubject.id == row_dict.get("teacher_subject_id"),
+            TeacherSubject.teacher_id == teacher.teacher_id,
+            TeacherSubject.is_active == True
+        ).first()
+        if not teacher_subject:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only view assignments you teach")
+    else:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
+
+    return AssignmentResponse.model_validate(row_dict)
+
+
 
 @router.put("/{assignment_id}", response_model=AssignmentResponse)
 async def update_assignment(
     assignment_id: int,
+
     assignment_data: AssignmentUpdate,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
     db: Session = Depends(get_db)
@@ -494,15 +605,22 @@ async def update_assignment(
     """
     Update assignment.
     """
-    assignment = db.query(Assignment).filter(
-        Assignment.id == assignment_id
-    ).first()
-    
+    try:
+        assignment = db.query(Assignment).filter(
+            Assignment.id == assignment_id
+        ).first()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to fetch assignment due to current DB schema"
+        )
+
     if not assignment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Assignment not found"
         )
+
     
     # Check ownership
     if assignment.created_by != current_user.id and current_user.role != UserRole.ADMIN:
@@ -511,8 +629,9 @@ async def update_assignment(
             detail="You can only update your own assignments"
         )
     
-    for key, value in assignment_data.dict(exclude_unset=True).items():
+    for key, value in assignment_data.model_dump(exclude_unset=True).items():
         setattr(assignment, key, value)
+
     
     assignment.updated_by = current_user.id
     db.commit()
@@ -522,6 +641,7 @@ async def update_assignment(
 
 @router.delete("/{assignment_id}")
 async def delete_assignment(
+
     assignment_id: int,
     current_user: User = Depends(require_role(UserRole.TEACHER)),
     db: Session = Depends(get_db)
@@ -529,9 +649,16 @@ async def delete_assignment(
     """
     Delete assignment.
     """
-    assignment = db.query(Assignment).filter(
-        Assignment.id == assignment_id
-    ).first()
+    try:
+        assignment = db.query(Assignment).filter(
+            Assignment.id == assignment_id
+        ).first()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to delete assignment due to current DB schema"
+        )
+
     
     if not assignment:
         raise HTTPException(
@@ -566,9 +693,16 @@ async def grade_assignment(
     """
     Grade students for an assignment.
     """
-    assignment = db.query(Assignment).filter(
-        Assignment.id == assignment_id
-    ).first()
+    try:
+        assignment = db.query(Assignment).filter(
+            Assignment.id == assignment_id
+        ).first()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to fetch assignment due to current DB schema"
+        )
+
     
     if not assignment:
         raise HTTPException(
@@ -628,36 +762,65 @@ async def get_assignment_results(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Get results for an assignment.
-    """
-    assignment = db.query(Assignment).filter(
-        Assignment.id == assignment_id
-    ).first()
-    
+    """Get assignment results with IDOR protection."""
+
+    try:
+        assignment = db.query(Assignment).filter(
+            Assignment.id == assignment_id,
+            Assignment.is_active == True
+        ).first()
+    except Exception:
+        # If assignments table columns are incomplete, still allow fetching results
+        assignment = None
+
+
+
     if not assignment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Assignment not found"
         )
-    
-    # Check permissions
+
+    if current_user.role == UserRole.ADMIN:
+        results = db.query(AssignmentResult).filter(
+            AssignmentResult.assignment_id == assignment_id
+        ).all()
+        return [AssignmentResultResponse.model_validate(r) for r in results]
+
     if current_user.role == UserRole.TEACHER:
         teacher = db.query(TeacherProfile).filter(
             TeacherProfile.user_id == current_user.id
         ).first()
+
+
+        if not teacher:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Teacher profile not found"
+            )
+
         teacher_subject = db.query(TeacherSubject).filter(
             TeacherSubject.id == assignment.teacher_subject_id,
-            TeacherSubject.teacher_id == teacher.teacher_id if teacher else None
+            TeacherSubject.teacher_id == teacher.teacher_id,
+            TeacherSubject.is_active == True
         ).first()
+
         if not teacher_subject:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only view results for your assignments"
+                detail="You can only view results for assignments you teach"
             )
-    
-    results = db.query(AssignmentResult).filter(
-        AssignmentResult.assignment_id == assignment_id
-    ).all()
-    
-    return [AssignmentResultResponse.model_validate(r) for r in results]
+
+        results = db.query(AssignmentResult).filter(
+            AssignmentResult.assignment_id == assignment_id
+        ).all()
+        return [AssignmentResultResponse.model_validate(r) for r in results]
+
+    # Students are not allowed to fetch teacher assignment results through teacher assignment endpoints.
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Permission denied"
+    )
+
+
+

@@ -2,11 +2,11 @@ app/_pycache_/*
 .venv/
 __pycache__/
 routers/_pycache_/*
-.env/* 
+.ruff_cache/*
 venv/
 __pycache__/
 *.pyc
-.env
+.env/
 .pytest_cache/
 .mypy_cache/
 .vscode/

@@ -46,10 +46,14 @@ class AssignmentBase(BaseSchema):
     due_time: Optional[time] = None
     total_marks: float = 0.0
     passing_marks: float = 0.0
-    attachment_name: Optional[str] = Field(None, max_length=255)
-    attachment_url: Optional[str] = Field(None, max_length=500)
-    attachment_size: Optional[int] = None
+    file_name: Optional[str] = Field(None, max_length=255)
+    file_path: Optional[str] = Field(None, max_length=500)
+    file_type: Optional[str] = Field(None, max_length=100)
+    file_size: Optional[int] = None
+    uploaded_by: Optional[int] = None
     status: AssignmentStatus = AssignmentStatus.DRAFT
+
+
     publish_at: Optional[datetime] = None
     close_at: Optional[datetime] = None
     total_students: int = 0
@@ -135,9 +139,12 @@ class AssignmentUpdate(BaseSchema):
     due_time: Optional[time] = None
     total_marks: Optional[float] = None
     passing_marks: Optional[float] = None
-    attachment_name: Optional[str] = Field(None, max_length=255)
-    attachment_url: Optional[str] = Field(None, max_length=500)
-    attachment_size: Optional[int] = None
+    file_name: Optional[str] = Field(None, max_length=255)
+    file_path: Optional[str] = Field(None, max_length=500)
+    file_type: Optional[str] = Field(None, max_length=100)
+    file_size: Optional[int] = None
+    uploaded_by: Optional[int] = None
+
     status: Optional[AssignmentStatus] = None
     publish_at: Optional[datetime] = None
     close_at: Optional[datetime] = None

@@ -89,7 +89,7 @@ class SubjectBase(BaseSchema):
     subject_code: str = Field(..., min_length=1, max_length=30)
     subject_name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
-    display_order: int = Field(1, ge=1)
+    display_order: int = Field(0, ge=0)
     subject_type: str = "Core"
 
 

@@ -47,7 +47,7 @@ from app.email_services import send_reset_email, send_otp_email, send_verificati
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Authentication"])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
 
 # ============================================================
 # HELPER FUNCTIONS
@@ -231,52 +231,50 @@ async def refresh_access_token(
     request: RefreshTokenRequest,
     db: Session = Depends(get_db)
 ):
-    """
-    Refresh access token using refresh token.
-    """
+    """Refresh access token using refresh token."""
     try:
         payload = verify_refresh_token(request.refresh_token)
-        
+
         if not payload:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid or expired refresh token"
             )
-        
+
         user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token payload"
             )
-        
+
         user = db.query(User).filter(User.id == int(user_id)).first()
-        
+
         if not user or not user.is_active or user.is_deleted:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found or inactive"
             )
-        
-        # Create new access token
+
         new_access_token = create_access_token({
             "sub": str(user.id),
             "role": user.role.value
         })
-        
+
         return {
             "access_token": new_access_token,
+            "refresh_token": request.refresh_token,
             "token_type": "bearer",
             "expires_in": 3600
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Refresh token error: {str(e)}")
+        logger.exception("Refresh token error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while refreshing token"
+            detail=f"An error occurred while refreshing token: {type(e).__name__}: {str(e)}"
         )
 
 @router.post("/logout", response_model=ResponseSchema)

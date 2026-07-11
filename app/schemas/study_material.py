@@ -76,3 +76,15 @@ class StudyMaterialResponse(StudyMaterialBase, TimestampSchema, ActiveSchema):
     uploader: Optional[UserMinResponse] = None
 
 
+class StudyMaterialUpdate(BaseSchema):
+    title: Optional[str] = Field(None, max_length=200)
+    description: Optional[str] = None
+    material_type: Optional[MaterialType] = None
+
+    academic_sessions_id: Optional[int] = None
+    classroom_id: Optional[int] = None
+    class_subject_id: Optional[int] = None
+    teacher_subject_id: Optional[int] = None
+
+
+

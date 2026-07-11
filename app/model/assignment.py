@@ -200,10 +200,10 @@ class Assignment(
     )
 
     # =====================================================
-    # Attachment
+    # Attachment (Uploaded File)
     # =====================================================
 
-    attachment_name = Column(
+    file_name = Column(
 
         String(255),
 
@@ -211,7 +211,7 @@ class Assignment(
 
     )
 
-    attachment_url = Column(
+    file_path = Column(
 
         String(500),
 
@@ -219,13 +219,40 @@ class Assignment(
 
     )
 
-    attachment_size = Column(
+
+    file_type = Column(
+
+        String(100),
+
+        nullable=True
+
+    )
+
+    file_size = Column(
 
         Integer,
 
         nullable=True
 
     )
+
+    uploaded_by = Column(
+
+        Integer,
+
+        ForeignKey("users.id"),
+
+        nullable=True
+
+    )
+
+
+
+
+
+
+
+
 
     # =====================================================
     # Status

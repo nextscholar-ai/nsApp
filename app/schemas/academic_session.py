@@ -39,8 +39,8 @@ from .common import *
 class AcademicSessionBase(BaseSchema):
     session_code: str = Field(..., min_length=3, max_length=20)
     session_name: str = Field(..., min_length=1, max_length=20)
-    start_year: int = Field(..., ge=2000, le=2100)
-    end_year: int = Field(..., ge=2000, le=2100)
+    start_year: int = Field(..., ge=2000, le=2200)
+    end_year: int = Field(..., ge=2000, le=2200)
     start_date: date
     end_date: date
     is_current: bool = False

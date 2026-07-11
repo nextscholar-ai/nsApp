@@ -19,6 +19,7 @@ from app.repositories.academic_repository import (
     NoticeRepository, ChatRoomRepository, ChatMessageRepository,
     StudentPromotionHistoryRepository
 )
+
 from app.repositories.core_repositories import StudentClassRepository, TeacherSubjectRepository
 from app.core.enums import FeeStatus
 

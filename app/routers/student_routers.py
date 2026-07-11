@@ -1,121 +1,3 @@
-# from fastapi import APIRouter
-# from fastapi import Depends
-
-# from app.model import (
-#     User,
-#     StudentProfile
-# )
-
-# from app.dependencies import (
-#     require_role,
-#     get_current_student
-# )
-
-# router = APIRouter(
-#     prefix="/student",
-#     tags=["Student"]
-# )
-
-
-# # =====================================================
-# # STUDENT DASHBOARD
-# # =====================================================
-
-# @router.get("/dashboard")
-# def student_dashboard(
-
-#     current_user: User = Depends(
-#         require_role("student")
-#     ),
-
-#     student: StudentProfile = Depends(
-#         get_current_student
-#     )
-# ):
-
-#     return {
-
-#         "student_id":
-#         student.student_id,
-
-#         "student_name":
-#         student.student_name,
-
-#         "student_email":
-#         student.student_email,
-
-#         "student_phone":
-#         student.student_phone,
-
-#         "student_class":
-#         student.student_class,
-
-#         "role":
-#         current_user.role,
-
-#         "is_active":
-#         current_user.is_active
-#     }
-
-
-# # =====================================================
-# # STUDENT PROFILE SUMMARY
-# # =====================================================
-
-# @router.get("/me")
-# def get_my_profile(
-
-#     current_user: User = Depends(
-#         require_role("student")
-#     ),
-
-#     student: StudentProfile = Depends(
-#         get_current_student
-#     )
-# ):
-
-#     return {
-
-#         "student_id":
-#         student.student_id,
-
-#         "student_name":
-#         student.student_name,
-
-#         "student_email":
-#         student.student_email,
-
-#         "student_phone":
-#         student.student_phone,
-
-#         "student_class":
-#         student.student_class,
-
-#         "parent_name":
-#         student.parent_name,
-
-#         "parent_phone":
-#         student.parent_phone,
-
-#         "guardian_name":
-#         student.guardian_name,
-
-#         "guardian_phone":
-#         student.guardian_phone,
-
-#         "school_name":
-#         student.school_name,
-
-#         "medium":
-#         student.medium,
-
-#         "board":
-#         student.board,
-
-#         "role":
-#         current_user.role
-#     }
-
 
 # ============================================================
 # routers/student_routers.py - Student Routes
@@ -182,7 +64,7 @@ async def update_student_profile(
         )
     
     # Update fields
-    for key, value in profile_data.dict(exclude_unset=True).items():
+    for key, value in profile_data.model_dump(exclude_unset=True).items():
         setattr(student, key, value)
     
     student.updated_by = current_user.id
@@ -190,6 +72,92 @@ async def update_student_profile(
     db.refresh(student)
     
     return StudentProfileResponse.model_validate(student)
+
+
+# ============================================================
+# STUDENT PROFILE — ADMIN / STUDENT ACCESS BY student_id
+# ============================================================
+
+@router.get("/profile/{student_id}", response_model=StudentProfileResponse)
+async def get_student_profile_by_id(
+    student_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get a student profile by student_id.
+
+    Access rules:
+    - ADMIN  : can fetch any student profile.
+    - STUDENT: can only fetch their own profile.
+    - TEACHER: forbidden (403).
+    """
+    from app.core.enums import UserRole as _Role
+    from app.services.identifier_resolver_service import IdentifierResolverService
+
+    # Block teachers outright
+    if current_user.role == _Role.TEACHER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teachers cannot view student profiles via this endpoint"
+        )
+
+    # `student_id` ab id, email, ya naam - teeno accept karta hai
+    profile = IdentifierResolverService(db).resolve_student(student_id)
+
+    # Students can only view their own profile
+    if current_user.role == _Role.STUDENT and profile.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own profile"
+        )
+
+    return StudentProfileResponse.model_validate(profile)
+
+
+@router.put("/profile/{student_id}", response_model=StudentProfileResponse)
+async def update_student_profile_by_id(
+    student_id: str,
+    profile_data: StudentProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update a student profile by student_id.
+
+    Access rules:
+    - STUDENT: can only update their own profile.
+    - ADMIN   : forbidden — admins manage users, not student profiles directly.
+    - TEACHER : forbidden.
+    """
+    from app.core.enums import UserRole as _Role
+    from app.services.identifier_resolver_service import IdentifierResolverService
+
+    # Only students may update student profiles
+    if current_user.role != _Role.STUDENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can update student profiles"
+        )
+
+    # `student_id` ab id, email, ya naam - teeno accept karta hai
+    profile = IdentifierResolverService(db).resolve_student(student_id)
+
+    # Student can only update their own profile
+    if profile.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own profile"
+        )
+
+    for key, value in profile_data.model_dump(exclude_unset=True).items():
+        setattr(profile, key, value)
+
+    profile.updated_by = current_user.id
+    db.commit()
+    db.refresh(profile)
+
+    return StudentProfileResponse.model_validate(profile)
 
 # ============================================================
 # STUDENT CLASSES

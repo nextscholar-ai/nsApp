@@ -10,3 +10,6 @@ from .exam import Exam, ExamResult
 from .fee import Fee
 from .notice import Notice
 from .chat import ChatRoom, ChatMessage
+from .student_id_card import StudentIDCard
+from .attachment import Attachment
+

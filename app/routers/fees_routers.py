@@ -372,8 +372,10 @@ async def create_fee(
             detail=f"Fee already exists for {fee_data.fee_month}/{fee_data.fee_year}"
         )
     
+    from app.helpers.code_generators import generate_fee_code
+
     new_fee = Fee(
-        fee_id=fee_data.fee_id,
+        fee_id=fee_data.fee_id or generate_fee_code(),
         academic_sessions_id=fee_data.academic_sessions_id,
         student_class_id=fee_data.student_class_id,
         fee_month=fee_data.fee_month,
@@ -543,17 +545,17 @@ async def get_student_fee_summary(
 ):
     """
     Get fee summary for a student.
+
+    `student_id` path segment ab student_id, email, ya naam - teeno
+    accept karta hai. Naam se 1 se zyada student match ho to 409 milta
+    hai jisme candidates list hoti hai (frontend usse picker dikha
+    sakta hai).
     """
-    student = db.query(StudentProfile).filter(
-        StudentProfile.student_id == student_id
-    ).first()
-    
-    if not student:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student not found"
-        )
-    
+    from app.services.identifier_resolver_service import IdentifierResolverService
+
+    student = IdentifierResolverService(db).resolve_student(student_id)
+    student_id = student.student_id  # normalize to the real business id
+
     student_class = db.query(StudentClass).filter(
         StudentClass.student_id == student_id,
         StudentClass.academic_sessions_id == academic_sessions_id

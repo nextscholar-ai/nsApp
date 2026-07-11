@@ -1,271 +1,3 @@
-# from fastapi import APIRouter
-# from fastapi import Depends
-# from fastapi import HTTPException
-
-# from sqlalchemy.orm import Session
-# from sqlalchemy import or_
-
-# from app.api.database import SessionLocal
-
-# from app.model import (
-#     User,
-#     StudentProfile,
-#     TeacherProfile
-# )
-
-# from app.schemas import (
-#     AdminCreateStudentSchema,
-#     AdminCreateTeacherSchema,
-#     usertatusUpdate
-# )
-
-# from app.dependencies import (
-#     get_current_admin,
-#     get_db
-# )
-
-# from app.auth import (
-#     hash_password
-# )
-
-
-# router = APIRouter(
-#     prefix="/admin",
-#     tags=["Admin"]
-# )
-
-# @router.post("/students")
-# def create_student(
-#     data: AdminCreateStudentSchema,
-#     admin=Depends(get_current_admin)
-# ):
-#     db: Session = Depends(get_db)
-
-#     try:
-
-#         existing = db.query(User).filter(
-#             or_(
-#                 User.email == data.email,
-#                 User.phone == data.phone
-#             )
-#         ).first()
-    
-#         if existing:
-
-#             raise HTTPException(
-#                 status_code=400,
-#                 detail="User already exists"
-#             )
-    
-#         user = User(
-        
-#             username=data.email,
-    
-#             email=data.email,
-    
-#             phone=data.phone,
-
-#             password_hash=hash_password(
-#                 data.password
-#             ),
-
-#             role="student"
-#         )
-
-#         db.add(user)
-
-#         db.commit()
-
-#         db.refresh(user)
-
-
-#     student_id = f"STU{user.id:06d}"
-
-#     user.student_id = student_id
-
-#     db.commit()
-    
-
-#     profile = StudentProfile(
-
-#             student_id=student_id,
-
-#             user_id=user.id,
-
-#             student_name=data.student_name,
-
-#             student_email=user.email,
-
-#             student_phone=user.phone
-#         )
-
-#     db.add(profile)
-
-#     db.commit()
-
-#     return {
-
-#         "message":
-#         "Student created",
-
-#         "student_id":
-#         student_id
-#     }
-    
-
-
-# @router.post("/teachers")
-# def create_teacher(
-#     data: AdminCreateTeacherSchema,
-#     admin=Depends(get_current_admin)
-# ):
-#     db: Session = Depends(get_db)
-
-#     try:
-
-#         existing = db.query(User).filter(
-#             or_(
-#                 User.email == data.email,
-#                 User.phone == data.phone
-#             )
-#         ).first()
-    
-#         if existing:
-
-#             raise HTTPException(
-#                 status_code=400,
-#                 detail="User already exists"
-#             )
-    
-#         user = User(
-        
-#             username=data.email,
-    
-#             email=data.email,
-    
-#             phone=data.phone,
-
-#             password_hash=hash_password(
-#                 data.password
-#             ),
-
-#             role="teacher"
-#         )
-
-#         db.add(user)
-
-#         db.commit()
-
-#         db.refresh(user)
-
-
-#     teacher_id = f"TEA{user.id:06d}"
-
-#     user.teacher_id = teacher_id
-
-#     db.commit()
-    
-
-#     profile = TeacherProfile(
-
-#             teacher_id=teacher_id,
-
-#             user_id=user.id,
-
-#             teacher_name=data.teacher_name,
-
-#             teacher_email=user.email,
-
-#             teacher_phone=user.phone,
-
-#             qualification=data.qualification,
-
-#             department=data.department
-#         )
-
-#     db.add(profile)
-
-#     db.commit()
-
-#     return {
-
-#         "message":
-#         "Teacher created",
-
-#         "teacher_id":
-#         teacher_id
-#     }
-
-
-
-# @router.get("/user")
-# def list_user(
-#     admin=Depends(get_current_admin)
-# ):
-#     db: Session = Depends(get_db)
-
-#     user = db.query(User).all()
-
-#     return user
-
-
-# @router.get("/user/{user_id}")
-# def get_user(
-#     user_id: int,
-#     admin=Depends(get_current_admin)
-# ):
-#     user = db.query(User).filter(
-#         User.id == user_id
-#     ).first()
-#     return{
-#         "id": user.id,
-#         "role": user.role,
-#         "email": user.email,
-#         "phone": user.phone,
-#         "student_id": user.student_id,
-#         "teacher_id": user.teacher_id,
-#         "is_active": user.is_active
-#     }
-
-
-# @router.put(
-#     "/user/{user_id}/status"
-# )
-# def update_status(
-#     user_id:int,
-#     data:usertatusUpdate,
-#     admin=Depends(get_current_admin)
-# ):
-#     user.is_active = data.is_active
-
-#     db.commit()
-
-#     return {
-#         "message":"updated"
-#     }
-
-
-
-# @router.get("/dashboard")
-# def admin_dashboard(
-#     admin=Depends(get_current_admin)
-# ):
-#     total_user = db.query(User).count()
-
-#     total_students = db.query(User).filter(
-#         User.role == "student"
-#     ).count()
-
-#     total_teachers = db.query(User).filter(
-#         User.role == "teacher"
-#     ).count()
-
-#     return {
-#         "role":"admin",
-#         "total_user":total_user,
-#         "total_students":total_students,
-#         "total_teachers":total_teachers
-#     }
 
 
 # ============================================================
@@ -287,9 +19,7 @@ from app.schemas import (
     AdminProfileCreate,
     AdminProfileUpdate,
     AdminProfileResponse,
-    StudentProfileCreate,
     StudentProfileResponse,
-    TeacherProfileCreate,
     TeacherProfileResponse,
     AcademicSessionCreate,
     AcademicSessionUpdate,
@@ -305,8 +35,13 @@ from app.schemas import (
     StudentClassCreate,
     StudentClassResponse,
     PaginatedResponseSchema,
-    ResponseSchema
+    ResponseSchema,
+    PaginatedTeacherAdminListResponse,
+    PaginatedStudentAdminListResponse,
+    TeacherAdminListResponse,
+    StudentAdminListResponse,
 )
+
 from app.auth import hash_password
 from app.dependencies import (
     get_current_user,
@@ -314,6 +49,8 @@ from app.dependencies import (
     require_super_admin
 )
 from app.core.enums import UserRole
+from app.services.admin_student_teacher_service import AdminStudentTeacherService
+
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -374,17 +111,91 @@ async def create_user(
     db.commit()
     db.refresh(new_user)
     
-    # Create profile based on role
-    if user_data.role == UserRole.STUDENT:
-        # Student profile will be created separately
-        pass
-    elif user_data.role == UserRole.TEACHER:
-        # Teacher profile will be created separately
-        pass
-    elif user_data.role == UserRole.ADMIN:
-        # Admin profile will be created separately
-        pass
-    
+    # ----------------------------------------------------------------
+    # AUTO-CREATE role-specific profile in the SAME transaction
+    # - Prevent duplicate profile rows
+    # ----------------------------------------------------------------
+    try:
+        if user_data.role == UserRole.STUDENT:
+            # Prevent duplicate profile creation
+            existing_profile = db.query(StudentProfile).filter(
+                StudentProfile.user_id == new_user.id
+            ).first()
+            if existing_profile:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Student profile already exists for this user"
+                )
+
+            # Extract name hint from email prefix (updated by student later)
+            name_hint = new_user.email.split("@")[0].replace(".", " ").replace("_", " ").title()
+            student_profile = StudentProfile(
+                student_id=new_user.student_id,
+                user_id=new_user.id,
+                student_name=name_hint,
+                school_name="",          # placeholder – student updates later
+                created_by=current_user.id
+            )
+            db.add(student_profile)
+            db.flush()  # get the row into the transaction before generating registration_number
+
+            from app.services.registration_number_service import RegistrationNumberService
+            RegistrationNumberService(db).generate_for_student(student_profile, commit=False)
+
+        elif user_data.role == UserRole.TEACHER:
+            # Prevent duplicate profile creation
+            existing_profile = db.query(TeacherProfile).filter(
+                TeacherProfile.user_id == new_user.id
+            ).first()
+            if existing_profile:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Teacher profile already exists for this user"
+                )
+
+            name_hint = new_user.email.split("@")[0].replace(".", " ").replace("_", " ").title()
+            teacher_profile = TeacherProfile(
+                teacher_id=new_user.teacher_id,
+                user_id=new_user.id,
+                teacher_name=name_hint,
+                created_by=current_user.id
+            )
+            db.add(teacher_profile)
+
+        elif user_data.role == UserRole.ADMIN:
+            # Prevent duplicate profile creation
+            existing_profile = db.query(AdminProfile).filter(
+                AdminProfile.user_id == new_user.id
+            ).first()
+            if existing_profile:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Admin profile already exists for this user"
+                )
+
+            name_hint = new_user.email.split("@")[0].replace(".", " ").replace("_", " ").title()
+            admin_profile = AdminProfile(
+                admin_id=new_user.admin_id,
+                user_id=new_user.id,
+                admin_name=name_hint,
+                created_by=current_user.id
+            )
+            db.add(admin_profile)
+
+        db.commit()
+        db.refresh(new_user)
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"User created but profile creation failed: {exc}"
+        )
+
+
     return UserResponse.model_validate(new_user)
 
 @router.get("/user", response_model=PaginatedResponseSchema[UserResponse])
@@ -547,189 +358,14 @@ async def delete_user(
 # ADMIN PROFILE MANAGEMENT
 # ============================================================
 
-@router.post("/admin-profiles", response_model=AdminProfileResponse)
-async def create_admin_profile(
-    profile_data: AdminProfileCreate,
-    current_user: User = Depends(require_super_admin),
-    db: Session = Depends(get_db)
-):
-    """
-    Create admin profile.
-    """
-    # Check if user exists
-    user = db.query(User).filter(User.id == profile_data.user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    
-    # Check if profile exists
-    existing = db.query(AdminProfile).filter(
-        AdminProfile.user_id == profile_data.user_id
-    ).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Admin profile already exists"
-        )
-    
-    # Generate admin_id if not provided
-    admin_id = profile_data.admin_id or f"ADM{datetime.now().year}{datetime.now().month:02d}{user.id:04d}"
-    
-    new_profile = AdminProfile(
-        admin_id=admin_id,
-        user_id=profile_data.user_id,
-        admin_name=profile_data.admin_name,
-        designation=profile_data.designation,
-        phone=profile_data.phone,
-        profile_photo=profile_data.profile_photo,
-        notes=profile_data.notes,
-        can_create_admin=profile_data.can_create_admin,
-        super_admin=profile_data.super_admin
-    )
-    
-    db.add(new_profile)
-    db.commit()
-    db.refresh(new_profile)
-    
-    return AdminProfileResponse.model_validate(new_profile)
+# NOTE:
+# Manual admin profile creation endpoint removed.
+# AdminProfile is auto-created automatically during POST /admin/user
 
 
-@router.post("/student-profiles", response_model=StudentProfileResponse)
-async def create_student_profile(
-    profile_data: StudentProfileCreate,
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
-    db: Session = Depends(get_db)
-):
-    """
-    Create a student profile for an existing user with role=student.
-    """
-    user = db.query(User).filter(User.id == profile_data.user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
 
-    if user.role != UserRole.STUDENT:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User does not have the student role"
-        )
-
-    existing = db.query(StudentProfile).filter(
-        StudentProfile.user_id == profile_data.user_id
-    ).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Student profile already exists"
-        )
-
-    if not user.student_id:
-        from app.helpers.code_generators import generate_student_id
-        user.student_id = generate_student_id(user.id)
-        db.commit()
-        db.refresh(user)
-
-    new_profile = StudentProfile(
-        student_id=user.student_id,
-        user_id=user.id,
-        student_name=profile_data.student_name,
-        gender=profile_data.gender,
-        date_of_birth=profile_data.date_of_birth,
-        blood_group=profile_data.blood_group,
-        profile_photo=profile_data.profile_photo,
-        school_name=profile_data.school_name,
-        school_address=profile_data.school_address,
-        medium=profile_data.medium,
-        board=profile_data.board,
-        address=profile_data.address,
-        city=profile_data.city,
-        state=profile_data.state,
-        pincode=profile_data.pincode,
-        parent_name=profile_data.parent_name,
-        parent_phone=profile_data.parent_phone,
-        guardian_name=profile_data.guardian_name,
-        guardian_phone=profile_data.guardian_phone,
-        emergency_contact=profile_data.emergency_contact,
-        admission_date=profile_data.admission_date,
-        remarks=profile_data.remarks,
-        admission_number=profile_data.admission_number,
-    )
-
-    db.add(new_profile)
-    db.commit()
-    db.refresh(new_profile)
-
-    return StudentProfileResponse.model_validate(new_profile)
-
-
-@router.post("/teacher-profiles", response_model=TeacherProfileResponse)
-async def create_teacher_profile(
-    profile_data: TeacherProfileCreate,
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
-    db: Session = Depends(get_db)
-):
-    """
-    Create a teacher profile for an existing user with role=teacher.
-    """
-    user = db.query(User).filter(User.id == profile_data.user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-
-    if user.role != UserRole.TEACHER:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User does not have the teacher role"
-        )
-
-    existing = db.query(TeacherProfile).filter(
-        TeacherProfile.user_id == profile_data.user_id
-    ).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Teacher profile already exists"
-        )
-
-    if not user.teacher_id:
-        from app.helpers.code_generators import generate_teacher_id
-        user.teacher_id = generate_teacher_id(user.id)
-        db.commit()
-        db.refresh(user)
-
-    new_profile = TeacherProfile(
-        teacher_id=user.teacher_id,
-        user_id=user.id,
-        teacher_name=profile_data.teacher_name,
-        gender=profile_data.gender,
-        date_of_birth=profile_data.date_of_birth,
-        qualification=profile_data.qualification,
-        experience_years=profile_data.experience_years,
-        specialization=profile_data.specialization,
-        profile_photo=profile_data.profile_photo,
-        employee_code=profile_data.employee_code,
-        joining_date=profile_data.joining_date,
-        designation=profile_data.designation,
-        department=profile_data.department,
-        address=profile_data.address,
-        city=profile_data.city,
-        state=profile_data.state,
-        pincode=profile_data.pincode,
-        emergency_contact=profile_data.emergency_contact,
-        remarks=profile_data.remarks,
-    )
-
-    db.add(new_profile)
-    db.commit()
-    db.refresh(new_profile)
-
-    return TeacherProfileResponse.model_validate(new_profile)
+# POST /admin/student-profiles  → REMOVED (profile auto-created on POST /admin/user)
+# POST /admin/teacher-profiles  → REMOVED (profile auto-created on POST /admin/user)
 
 @router.get("/admin-profiles", response_model=List[AdminProfileResponse])
 async def list_admin_profiles(
@@ -838,7 +474,13 @@ async def create_classroom(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Class already exists in this session"
         )
-    
+
+    # class_teacher_id ab teacher_id, email, ya naam - teeno accept karta hai
+    resolved_class_teacher_id = None
+    if class_data.class_teacher_id:
+        from app.services.identifier_resolver_service import IdentifierResolverService
+        resolved_class_teacher_id = IdentifierResolverService(db).resolve_teacher_id(class_data.class_teacher_id)
+
     new_class = ClassRoom(
         academic_sessions_id=class_data.academic_sessions_id,
         class_code=class_data.class_code,
@@ -846,7 +488,7 @@ async def create_classroom(
         section=class_data.section,
         display_name=class_data.display_name,
         description=class_data.description,
-        class_teacher_id=class_data.class_teacher_id,
+        class_teacher_id=resolved_class_teacher_id,
         created_by=current_user.id
     )
     
@@ -944,17 +586,12 @@ async def assign_teacher_to_subject(
     Assign a teacher to a subject.
     """
     from app.model import TeacherSubject, ClassSubject, TeacherProfile
-    
-    # Check teacher exists
-    teacher = db.query(TeacherProfile).filter(
-        TeacherProfile.teacher_id == mapping_data.teacher_id
-    ).first()
-    if not teacher:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Teacher not found"
-        )
-    
+    from app.services.identifier_resolver_service import IdentifierResolverService
+
+    # teacher_id field ab teacher_id, email, ya naam accept karta hai
+    teacher = IdentifierResolverService(db).resolve_teacher(mapping_data.teacher_id)
+    mapping_data.teacher_id = teacher.teacher_id  # normalize to the real business id
+
     # Check class subject exists
     class_subject = db.query(ClassSubject).filter(
         ClassSubject.id == mapping_data.class_subject_id
@@ -994,6 +631,30 @@ async def assign_teacher_to_subject(
     
     return TeacherSubjectResponse.model_validate(new_mapping)
 
+@router.get("/teacher-subjects", response_model=List[TeacherSubjectResponse])
+async def list_teacher_subjects(
+    academic_sessions_id: Optional[int] = None,
+    classroom_id: Optional[int] = None,
+    teacher_id: Optional[str] = None,
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    db: Session = Depends(get_db)
+):
+    """
+    List teacher-subject assignment mappings.
+    """
+    from app.model import TeacherSubject
+
+    query = db.query(TeacherSubject)
+    if academic_sessions_id:
+        query = query.filter(TeacherSubject.academic_sessions_id == academic_sessions_id)
+    if classroom_id:
+        query = query.filter(TeacherSubject.classroom_id == classroom_id)
+    if teacher_id:
+        query = query.filter(TeacherSubject.teacher_id == teacher_id)
+
+    mappings = query.order_by(TeacherSubject.id).all()
+    return [TeacherSubjectResponse.model_validate(m) for m in mappings]
+
 # ============================================================
 # STUDENT CLASS ENROLLMENT
 # ============================================================
@@ -1008,17 +669,12 @@ async def enroll_student(
     Enroll a student in a class.
     """
     from app.model import StudentClass, StudentProfile, ClassRoom
-    
-    # Check student exists
-    student = db.query(StudentProfile).filter(
-        StudentProfile.student_id == enrollment_data.student_id
-    ).first()
-    if not student:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student not found"
-        )
-    
+    from app.services.identifier_resolver_service import IdentifierResolverService
+
+    # student_id field ab student_id, email, ya naam accept karta hai
+    student = IdentifierResolverService(db).resolve_student(enrollment_data.student_id)
+    enrollment_data.student_id = student.student_id  # normalize to the real business id
+
     # Check classroom exists
     classroom = db.query(ClassRoom).filter(
         ClassRoom.id == enrollment_data.classroom_id
@@ -1069,6 +725,57 @@ async def enroll_student(
     
     return StudentClassResponse.model_validate(new_enrollment)
 
+@router.get("/student-classes", response_model=List[StudentClassResponse])
+async def list_student_classes(
+    academic_sessions_id: Optional[int] = None,
+    classroom_id: Optional[int] = None,
+    student_id: Optional[str] = None,
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    db: Session = Depends(get_db)
+):
+    """
+    List student-class enrollment records.
+    """
+    from app.model import StudentClass
+
+    query = db.query(StudentClass)
+    if academic_sessions_id:
+        query = query.filter(StudentClass.academic_sessions_id == academic_sessions_id)
+    if classroom_id:
+        query = query.filter(StudentClass.classroom_id == classroom_id)
+    if student_id:
+        query = query.filter(StudentClass.student_id == student_id)
+
+    enrollments = query.order_by(StudentClass.id).all()
+    return [StudentClassResponse.model_validate(e) for e in enrollments]
+
+# ============================================================
+# FLAT PROFILE LISTS (raw, non-paginated — used by internal tooling)
+# ============================================================
+
+@router.get("/student-profiles", response_model=List[StudentProfileResponse])
+async def list_student_profiles_flat(
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    db: Session = Depends(get_db)
+):
+    """
+    List all student profiles as a flat (non-paginated) list.
+    """
+    profiles = db.query(StudentProfile).all()
+    return [StudentProfileResponse.model_validate(p) for p in profiles]
+
+
+@router.get("/teacher-profiles", response_model=List[TeacherProfileResponse])
+async def list_teacher_profiles_flat(
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    db: Session = Depends(get_db)
+):
+    """
+    List all teacher profiles as a flat (non-paginated) list.
+    """
+    profiles = db.query(TeacherProfile).all()
+    return [TeacherProfileResponse.model_validate(p) for p in profiles]
+
 # ============================================================
 # SYSTEM HEALTH
 # ============================================================
@@ -1090,11 +797,54 @@ async def system_health(
         "timestamp": datetime.utcnow().isoformat()
     }
 
+@router.get("/teachers", response_model=PaginatedTeacherAdminListResponse)
+async def list_admin_teachers(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    department: Optional[str] = None,
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    db: Session = Depends(get_db)
+):
+    """List teachers for admin (pagination + search + filters)."""
+    service = AdminStudentTeacherService(db)
+    return service.list_teachers_admin(
+        page=page,
+        page_size=page_size,
+        search=search,
+        is_active=is_active,
+        department=department,
+    )
+
+
+@router.get("/students", response_model=PaginatedStudentAdminListResponse)
+async def list_admin_students(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    class_id: Optional[int] = Query(None, ge=1),
+    class_code: Optional[str] = None,
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    db: Session = Depends(get_db)
+):
+    """List students for admin (pagination + search + class filter)."""
+    service = AdminStudentTeacherService(db)
+    return service.list_students_admin(
+        page=page,
+        page_size=page_size,
+        search=search,
+        class_id=class_id,
+        class_code=class_code,
+    )
+
+
 @router.get("/system/statistics")
 async def system_statistics(
     current_user: User = Depends(require_role(UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
+
     """
     Get system statistics.
     """

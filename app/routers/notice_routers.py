@@ -183,20 +183,27 @@
 # routers/notice_routers.py - Notice Routes
 # ============================================================
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form
+
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date
+import os
+import uuid
+from pathlib import Path
+
 
 from app.api.database import get_db
 from app.model import User, Notice, ClassRoom
 from app.schemas import (
     NoticeResponse,
-    NoticeCreate,
     NoticeUpdate,
     NoticeFilterRequest,
     PaginatedResponseSchema
 )
+
+
 from app.dependencies import (
     get_current_user,
     require_role
@@ -209,38 +216,92 @@ router = APIRouter(prefix="/notices", tags=["Notice Board"])
 # NOTICE CRUD
 # ============================================================
 
+UPLOAD_DIR = Path("uploads") / "notices"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _notice_file_disk_path(stored_name: str) -> Path:
+    return UPLOAD_DIR / stored_name
+
+
+def _delete_if_exists(path: Path) -> None:
+    try:
+        if path.exists():
+            path.unlink()
+    except Exception:
+        # Don't crash API because of cleanup errors.
+        pass
+
+
 @router.post("/", response_model=NoticeResponse)
 async def create_notice(
-    notice_data: NoticeCreate,
+
+    title: str = Form(...),
+    description: str = Form(...),
+    notice_type: NoticeType = Form(NoticeType.GENERAL),
+    audience: NoticeAudience = Form(NoticeAudience.ALL),
+    publish_date: date = Form(...),
+    expiry_date: Optional[date] = Form(None),
+    is_pinned: bool = Form(False),
+    academic_sessions_id: int = Form(...),
+    classroom_id: Optional[int] = Form(None),
+    file: Optional[UploadFile] = File(None),
+
     current_user: User = Depends(require_role(UserRole.ADMIN)),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """
-    Create a new notice.
-    """
+    """Create a new notice, optionally with an uploaded attachment."""
+
+    attachment_name = None
+    attachment_path = None
+    attachment_size = None
+    mime_type = None
+
+    # Only a real, named file upload counts as an attachment. Some HTTP
+    # clients still send an empty file part even when "no file" was intended.
+    if file is not None and file.filename:
+        original_name = file.filename or "notice"
+        ext = os.path.splitext(original_name)[1]
+        stored_name = f"{uuid.uuid4().hex}{ext}" if ext else uuid.uuid4().hex
+
+        disk_path = _notice_file_disk_path(stored_name)
+
+        # Save to disk
+        with disk_path.open("wb") as buffer:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                buffer.write(chunk)
+
+        attachment_name = original_name
+        attachment_path = f"/uploads/notices/{stored_name}"
+        attachment_size = disk_path.stat().st_size
+        mime_type = file.content_type
+
     new_notice = Notice(
-        notice_id=notice_data.notice_id,
-        academic_sessions_id=notice_data.academic_sessions_id,
-        classroom_id=notice_data.classroom_id,
-        title=notice_data.title,
-        description=notice_data.description,
-        notice_type=notice_data.notice_type,
-        audience=notice_data.audience,
-        publish_date=notice_data.publish_date,
-        expiry_date=notice_data.expiry_date,
-        attachment_name=notice_data.attachment_name,
-        attachment_path=notice_data.attachment_path,
-        attachment_size=notice_data.attachment_size,
-        mime_type=notice_data.mime_type,
-        is_pinned=notice_data.is_pinned,
-        created_by=current_user.id
+        academic_sessions_id=academic_sessions_id,
+        classroom_id=classroom_id,
+        title=title,
+        description=description,
+        notice_type=notice_type,
+        audience=audience,
+        publish_date=publish_date,
+        expiry_date=expiry_date,
+        attachment_name=attachment_name,
+        attachment_path=attachment_path,
+        attachment_size=attachment_size,
+        mime_type=mime_type,
+        is_pinned=is_pinned,
+        created_by=current_user.id,
     )
-    
+
     db.add(new_notice)
     db.commit()
     db.refresh(new_notice)
-    
+
     return NoticeResponse.model_validate(new_notice)
+
 
 @router.get("/", response_model=List[NoticeResponse])
 async def get_notices(
@@ -284,30 +345,63 @@ async def get_notices(
     
     return [NoticeResponse.model_validate(n) for n in notices]
 
+def _notice_access_check(notice: Notice, current_user: User) -> None:
+    # Reuse your audience rules (similar to GET /notices)
+    if not notice:
+        return
+
+    if notice.expiry_date is not None:
+        if date.today() > notice.expiry_date:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notice expired")
+
+    if notice.publish_date > date.today():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notice not yet published")
+
+    if current_user.role == UserRole.STUDENT:
+        if notice.audience not in [NoticeAudience.ALL, NoticeAudience.STUDENT]:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    elif current_user.role == UserRole.TEACHER:
+        if notice.audience not in [NoticeAudience.ALL, NoticeAudience.TEACHER]:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+
 @router.get("/{notice_id}", response_model=NoticeResponse)
 async def get_notice(
     notice_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Get notice by ID.
-    """
+    """Get notice by ID."""
     notice = db.query(Notice).filter(Notice.id == notice_id).first()
+
     if not notice:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Notice not found"
         )
+
+    _notice_access_check(notice, current_user)
+
     return NoticeResponse.model_validate(notice)
+
 
 @router.put("/{notice_id}", response_model=NoticeResponse)
 async def update_notice(
+
     notice_id: int,
-    notice_data: NoticeUpdate,
+    title: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+    notice_type: Optional[NoticeType] = Form(None),
+    audience: Optional[NoticeAudience] = Form(None),
+    publish_date: Optional[date] = Form(None),
+    expiry_date: Optional[date] = Form(None),
+    is_pinned: Optional[bool] = Form(None),
+    classroom_id: Optional[int] = Form(None),
+    file: Optional[UploadFile] = File(None),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
+
     """
     Update notice.
     """
@@ -318,14 +412,51 @@ async def update_notice(
             detail="Notice not found"
         )
     
-    for key, value in notice_data.dict(exclude_unset=True).items():
-        setattr(notice, key, value)
-    
+    update_map = {
+        "title": title,
+        "description": description,
+        "notice_type": notice_type,
+        "audience": audience,
+        "publish_date": publish_date,
+        "expiry_date": expiry_date,
+        "is_pinned": is_pinned,
+        "classroom_id": classroom_id,
+    }
+
+    for key, value in update_map.items():
+        if value is not None:
+            setattr(notice, key, value)
+
+    # Replace file if provided
+    if file is not None:
+        # Remove old file (best-effort)
+        if notice.attachment_path:
+            old_disk = Path(notice.attachment_path.replace("/uploads/", "uploads/"))
+            _delete_if_exists(old_disk)
+
+        original_name = file.filename or "notice"
+        ext = os.path.splitext(original_name)[1]
+        stored_name = f"{uuid.uuid4().hex}{ext}" if ext else uuid.uuid4().hex
+        disk_path = _notice_file_disk_path(stored_name)
+
+        with disk_path.open("wb") as buffer:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                buffer.write(chunk)
+
+        notice.attachment_name = original_name
+        notice.attachment_path = f"/uploads/notices/{stored_name}"
+        notice.attachment_size = disk_path.stat().st_size
+        notice.mime_type = file.content_type
+
     notice.updated_by = current_user.id
     db.commit()
     db.refresh(notice)
-    
+
     return NoticeResponse.model_validate(notice)
+
 
 @router.delete("/{notice_id}")
 async def delete_notice(
@@ -333,21 +464,25 @@ async def delete_notice(
     current_user: User = Depends(require_role(UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
-    """
-    Delete notice.
-    """
+    """Soft-delete notice + remove attachment file from disk (best-effort)."""
     notice = db.query(Notice).filter(Notice.id == notice_id).first()
     if not notice:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Notice not found"
         )
-    
+
+    # Best-effort cleanup of old file
+    if notice.attachment_path:
+        stored_name = os.path.basename(str(notice.attachment_path))
+        _delete_if_exists(_notice_file_disk_path(stored_name))
+
     notice.is_active = False
     notice.deleted_by = current_user.id
     db.commit()
-    
+
     return {"success": True, "message": "Notice deleted successfully"}
+
 
 # ============================================================
 # NOTICE PIN/UNPIN
@@ -374,15 +509,67 @@ async def pin_notice(
     
     return {"success": True, "message": "Notice pinned successfully"}
 
+@router.get("/{notice_id}/view")
+async def view_notice_file(
+
+    notice_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    notice = db.query(Notice).filter(Notice.id == notice_id).first()
+    if not notice or not notice.attachment_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notice file not found")
+
+    _notice_access_check(notice, current_user)
+
+    stored_name = os.path.basename(str(notice.attachment_path))
+    disk_path = _notice_file_disk_path(stored_name)
+    if not disk_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File missing on server")
+
+    return FileResponse(
+        disk_path,
+        media_type=notice.mime_type,
+        filename=notice.attachment_name or stored_name,
+    )
+
+
+@router.get("/{notice_id}/download")
+async def download_notice_file(
+
+    notice_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    notice = db.query(Notice).filter(Notice.id == notice_id).first()
+    if not notice or not notice.attachment_path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notice file not found")
+
+    _notice_access_check(notice, current_user)
+
+    stored_name = os.path.basename(str(notice.attachment_path))
+    disk_path = _notice_file_disk_path(stored_name)
+    if not disk_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File missing on server")
+
+    # FileResponse sets Content-Disposition to inline by default; use attachment for download.
+    return FileResponse(
+        disk_path,
+        media_type=notice.mime_type,
+        filename=notice.attachment_name or stored_name,
+        headers={"Content-Disposition": f"attachment; filename=\"{notice.attachment_name or stored_name}\""},
+    )
+
+
 @router.post("/{notice_id}/unpin")
 async def unpin_notice(
     notice_id: int,
     current_user: User = Depends(require_role(UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
-    """
-    Unpin a notice.
-    """
+
+    """Unpin a notice."""
+
     notice = db.query(Notice).filter(Notice.id == notice_id).first()
     if not notice:
         raise HTTPException(

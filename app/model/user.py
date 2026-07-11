@@ -313,6 +313,18 @@ class StudentProfile(
         index=True
     )
 
+    # Search-friendly business identifier, distinct from admission_number.
+    # Auto-generated at profile-creation time (see admin_router.create_user
+    # and RegistrationNumberService.backfill_missing_registration_numbers
+    # for pre-existing rows). Nullable only to allow the one-time backfill
+    # window on an existing database; new rows always get one.
+    registration_number = Column(
+        String(30),
+        unique=True,
+        nullable=True,
+        index=True
+    )
+
     student_name = Column(
         String(MAX_NAME_LENGTH),
         nullable=False

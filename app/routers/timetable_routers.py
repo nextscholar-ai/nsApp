@@ -12,8 +12,11 @@ from app.schemas import (
     WeekDayResponse, WeekDayCreate, TimeSlotResponse, TimeSlotCreate,
     ClassTimeTableResponse, ClassTimeTableCreate, ClassTimeTableUpdate,
     TeacherAvailabilityResponse, TeacherAvailabilityCreate, TeacherAvailabilityUpdate,
-    ResponseSchema
+    ResponseSchema,
+    StudentTimetableItemResponse,
+    TeacherTimetableItemResponse,
 )
+
 from app.dependencies import get_current_user, require_role
 from app.core.enums import UserRole
 from app.services.academic_service import AcademicService
@@ -81,6 +84,36 @@ async def get_class_timetable(
     return service.get_class_timetable(classroom_id, session_id)
 
 
+# ==================== ADMIN TIMETABLE LIST ====================
+
+@router.get("/timetables")
+async def admin_get_timetables(
+    class_id: Optional[int] = Query(None, alias="class"),
+    teacher_subject_id: Optional[int] = Query(None, alias="teacher"),
+    subject_id: Optional[int] = Query(None, alias="subject"),
+    day_id: Optional[int] = Query(None, alias="day"),
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    db: Session = Depends(get_db),
+):
+
+    """Admin: list timetable entries with optional filters."""
+    from app.services.timetable_service import TimetableService
+    from app.schemas import ClassTimeTableResponse
+
+
+
+
+    service = TimetableService(db)
+    entries = service.admin_get_timetables(
+        classroom_id=class_id,
+        teacher_subject_id=teacher_subject_id,
+        class_subject_id=subject_id,
+        week_day_id=day_id,
+    )
+    return [ClassTimeTableResponse.model_validate(e) for e in entries]
+
+
+
 @router.post("/timetable", response_model=ClassTimeTableResponse)
 async def create_timetable_entry(
     data: ClassTimeTableCreate,
@@ -92,21 +125,70 @@ async def create_timetable_entry(
     return service.create_timetable(**data.dict())
 
 
-@router.delete("/timetable/{timetable_id}")
-async def delete_timetable_entry(
-    timetable_id: int,
+@router.put("/timetable/{id}", response_model=ClassTimeTableResponse)
+async def update_timetable_entry(
+    id: int,
+    data: ClassTimeTableUpdate,
     current_user: User = Depends(require_role(UserRole.ADMIN)),
     db: Session = Depends(get_db)
 ):
-    """Delete a timetable entry."""
-    service = AcademicService(db)
-    deleted = service.delete_timetable(timetable_id)
+    """Admin: Update a timetable entry."""
+    from app.services.timetable_service import TimetableService
+
+    service = TimetableService(db)
+    updated = service.admin_update_timetable(id, data.model_dump(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Timetable entry not found")
+    return updated
+
+
+@router.delete("/timetable/{id}")
+async def delete_timetable_entry(
+    id: int,
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
+    db: Session = Depends(get_db)
+):
+    """Admin: Delete a timetable entry."""
+    from app.services.timetable_service import TimetableService
+
+    service = TimetableService(db)
+    deleted = service.admin_delete_timetable(id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Timetable entry not found")
     return {"success": True, "message": "Timetable entry deleted"}
 
 
+
+# ==================== STUDENT TIMETABLE ====================
+
+@router.get("/student/timetable", response_model=List[StudentTimetableItemResponse])
+async def get_student_timetable(
+    current_user: User = Depends(require_role(UserRole.STUDENT)),
+    db: Session = Depends(get_db),
+):
+    """Student: get ONLY own class timetable for current academic session."""
+    from app.services.timetable_service import TimetableService
+
+    service = TimetableService(db)
+    return service.student_get_timetable(student_user_id=current_user.id)
+
+
+# ==================== TEACHER TIMETABLE ====================
+
+@router.get("/teacher/timetable", response_model=List[TeacherTimetableItemResponse])
+async def get_teacher_timetable(
+    current_user: User = Depends(require_role(UserRole.TEACHER)),
+    db: Session = Depends(get_db),
+):
+    """Teacher: get timetable for assigned classes for current academic session."""
+    from app.services.timetable_service import TimetableService
+
+    service = TimetableService(db)
+    return service.teacher_get_timetable(teacher_user_id=current_user.id)
+
+
 # ==================== TEACHER AVAILABILITY ====================
+
 
 @router.get("/availability/teacher/{teacher_subject_id}", response_model=List[TeacherAvailabilityResponse])
 async def get_teacher_availability(

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func
 from datetime import date, datetime, timedelta
 
-from app.model import DailyClass, DailyClassStudent, StudentAttendance, WeekDay, TimeSlot, ClassTimeTable, TeacherAvailability
+from app.model import DailyClass, DailyClassStudent, StudentAttendance, WeekDay, TimeSlot, ClassTimeTable, TeacherAvailability, TeacherSubject
 from app.repositories.base_repository import BaseRepository
 from app.core.enums import AttendanceStatus
 
@@ -57,11 +57,27 @@ class ClassTimeTableRepository(BaseRepository[ClassTimeTable]):
         ).first()
     
     def get_timetable_by_class(self, classroom_id: int, session_id: int) -> List[ClassTimeTable]:
-        return self.db.query(ClassTimeTable).filter(
-            ClassTimeTable.classroom_id == classroom_id,
-            ClassTimeTable.academic_sessions_id == session_id,
-            ClassTimeTable.is_active == True
-        ).all()
+        # Eager-load relationships to ensure nested response serialization works.
+        from sqlalchemy.orm import joinedload
+
+        return (
+            self.db.query(ClassTimeTable)
+            .options(
+                joinedload(ClassTimeTable.week_day),
+                joinedload(ClassTimeTable.time_slot),
+                # nested relationships use SQLAlchemy attributes (not string names)
+                joinedload(ClassTimeTable.class_subject),
+                joinedload(ClassTimeTable.teacher_subject),
+                joinedload(ClassTimeTable.teacher_subject).joinedload(TeacherSubject.subject),
+                joinedload(ClassTimeTable.teacher_subject).joinedload(TeacherSubject.teacher),
+            )
+            .filter(
+                ClassTimeTable.classroom_id == classroom_id,
+                ClassTimeTable.academic_sessions_id == session_id,
+                ClassTimeTable.is_active == True,
+            )
+            .all()
+        )
 
 
 class TeacherAvailabilityRepository(BaseRepository[TeacherAvailability]):
