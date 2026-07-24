@@ -1,28 +1,67 @@
-CREATE  .env FILE IN nsAPP FOLDER
-ADD THIS CODE 
+# Student ERP Backend
+
+A FastAPI-based Student ERP backend with PostgreSQL.
+
+---
+
+## Prerequisites
+
+- **Python 3.12+** installed
+- **PostgreSQL 16+** installed and running
+- **Git** (to clone the repo)
+
+---
+
+## 1. Clone the Repository
+
+```bash
+git clone <repo-url>
+cd nsApp
+```
+
+---
+
+## 2. Create the Database
+
+Open **pgAdmin** or `psql` and create a new database:
+
+```sql
+CREATE DATABASE your_database_name;
+```
+
+---
+
+## 3. Create `.env` File
+
+Create a file named `.env` in the project root (`nsApp/.env`).
+
+**`.gitignore` already ignores `.env`**, so your secrets stay safe.
+
+Replace all placeholders below:
+
+```env
 # ============================================================
 # Application
 # ============================================================
 APP_NAME=Student ERP Backend
 APP_VERSION=1.0.0
-APP_ENV=production
-DEBUG=false
+APP_ENV=development
+DEBUG=true
 
 # ============================================================
 # Database (PostgreSQL)
 # ============================================================
 DATABASE_HOST=localhost
 DATABASE_PORT=5432
-DATABASE_NAME=ENTER YOUR POSTGRESQL DATABASE NAME 
+DATABASE_NAME=your_database_name
 DATABASE_USER=postgres
-DATABASE_PASSWORD=ENTER YOUR POSTGRESQL PASSWORD
-DATABASE_URL=postgresql+psycopg://postgres:ENTER YOUR POSTGRESQL PASSWORD@localhost:5432/ENTER YOUR POSTGRESQL DATABASE NAME 
+DATABASE_PASSWORD=your_postgres_password
+DATABASE_URL=postgresql+psycopg://postgres:your_postgres_password@localhost:5432/your_database_name
 
 # ============================================================
 # Auth / JWT
 # ============================================================
-# Generate a strong secret, e.g.: python3 -c "import secrets; print(secrets.token_hex(32))"
-SECRET_KEY=3eb9a73e95626a5774187f344f287da6965457e495b045eed6d93b2275dfb95f
+SECRET_KEY=your_secret_key_here_at_least_32_chars
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 
@@ -33,49 +72,171 @@ UPLOAD_DIR=uploads
 LOG_LEVEL=INFO
 
 # ============================================================
-# Email (SMTP) - used by app/email_services.py
+# Email (SMTP)
 # ============================================================
 SMTP_SERVER=smtp.gmail.com
 SMTP_PORT=587
-SMTP_EMAIL=ENTER YOUR EMAIL
-SMTP_PASSWORD=ENETER YOUR 2 STEP VARIFICATION APP PASSWORD
+SMTP_EMAIL=your_email@gmail.com
+SMTP_PASSWORD=your_gmail_app_password
 
-# Frontend URL - used to build password reset / verification links
 FRONTEND_URL=http://localhost:3000
+```
 
+### What to change in `.env`:
 
+| Variable | Description |
+|---|---|
+| `DATABASE_NAME` | The name you gave your PostgreSQL database |
+| `DATABASE_PASSWORD` | Your PostgreSQL password |
+| `DATABASE_URL` | Uses the same password and database name |
+| `SECRET_KEY` | Generate via: `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `SMTP_EMAIL` | Your Gmail address for sending emails |
+| `SMTP_PASSWORD` | Gmail App Password (generate at https://myaccount.google.com/apppasswords) |
 
+---
 
+## 4. Set Up Virtual Environment
 
+```bash
+# Windows (PowerShell)
+python -m venv venv
+venv\Scripts\Activate.ps1
 
+# Windows (Command Prompt)
+python -m venv venv
+venv\Scripts\activate
 
+# macOS / Linux
+python3 -m venv venv
+source venv/bin/activate
+```
 
-1.Install PostgreSQL and set a secure password during setup.
-2.enetr  this password to in postgresql.
-3.then create your database.
-4.connect your application using the same password and your new database name.
+---
 
+## 5. Install Dependencies
 
-1.ADD THIS CODE IN .env FILE 
-ADD YOUR POSTGRESQL PASSWORD  IN BOTH LINE 
-DATABASE_PASSWORD=ENTER YOUR POSTGRESQL PASSWORD
-DATABASE_URL=postgresql+psycopg://postgres:ENTER YOUR POSTGRESQL PASSWORD@localhost:5432/ENTER YOUR POSTGRESQL DATABASE NAME 
+```bash
+pip install -r requirements.txt
+```
 
+---
 
+## 6. Run Database Migrations
 
-2.ADD YOUR DATABASE NAME IN BOTH LINE 
-DATABASE_NAME=ENTER YOUR POSTGRESQL DATABASE NAME 
-DATABASE_URL=postgresql+psycopg://postgres:ENTER YOUR POSTGRESQL PASSWORD@localhost:5432/ENTER YOUR POSTGRESQL DATABASE NAME 
+```bash
+alembic upgrade head
+```
 
+This creates all database tables matching the SQLAlchemy models.
 
-3.ADD EMAIL AND 2 STEP VARIFICATION CODE IN 
-SMTP_EMAIL=ENTER YOUR EMAIL
-SMTP_PASSWORD=ENETER YOUR 2 STEP VARIFICATION APP PASSWORD
+---
 
+## 7. Seed Initial Data (Optional)
 
+```bash
+python scripts/seed_accounts.py
+```
 
-1.CREATE ENVIRONMENT AND ACTIVATE ENVIRONMENT 
-2.INSTALL REQUIREMENTS 
-3.UPDATE SCRIPTS/SEED_ACCOUNTS.PY FILE DATA 
-4.RUN SCRIPTS/SEED_ACCOUNTS.PY FILE 
-5.RUN MAIN FILE 
+Creates default admin/teacher/student accounts for testing.
+
+---
+
+## 8. Start the Server
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+or
+uvicorn app.main:app
+```
+
+- API: **http://localhost:8000**
+- Swagger Docs: **http://localhost:8000/docs**
+
+---
+
+## What `.gitignore` Excludes (Must Be Set Up Manually)
+
+| Ignored Item | How to Set Up |
+|---|---|
+| `.env` | Create from template above |
+| `venv/` | Run `python -m venv venv` |
+| `__pycache__/` | Auto-created (no action needed) |
+| `uploads/` | Auto-created by the app |
+| `logs/` | Auto-created by the app |
+
+---
+
+## Project Structure
+
+```
+nsApp/
+├── .env                    # Environment variables (CREATE THIS)
+├── .gitignore
+├── requirements.txt        # Python dependencies
+├── alembic.ini             # Alembic configuration
+├── alembic/                # Database migration scripts
+│   ├── env.py
+│   └── versions/
+├── app/
+│   ├── main.py             # FastAPI entry point
+│   ├── api/
+│   │   ├── config.py       # Reads .env
+│   │   └── database.py     # SQLAlchemy engine & session
+│   ├── core/               # Enums, exceptions, mixins
+│   ├── helpers/            # Code generators
+│   ├── model/              # SQLAlchemy models
+│   ├── routers/            # API route handlers
+│   ├── schemas/            # Pydantic request/response
+│   ├── repositories/       # Database query layer
+│   └── services/           # Business logic layer
+├── scripts/
+│   └── seed_accounts.py    # Seed default accounts
+└── uploads/                # Uploaded files (auto-created)
+```
+
+---
+
+## API Endpoints
+
+| Prefix | Description |
+|---|---|
+| `/auth` | Login, register, email verification, password reset |
+| `/admin` | Admin CRUD |
+| `/students` | Student CRUD & attendance |
+| `/teachers` | Teacher CRUD |
+| `/subjects` | Subject management |
+| `/classroom` | Classroom CRUD |
+| `/assignments` | Assignments & results |
+| `/exams` | Exam management & results |
+| `/fees` | Fee management |
+| `/timetable` | Class timetable |
+| `/chat` | Messaging |
+| `/notices` | Notices |
+| `/study-materials` | Study materials |
+| `/daily-class` | Daily class management |
+| `/dashboard` | Dashboard statistics |
+| `/promotions` | Student promotion |
+| `/student-id-cards` | ID card generation |
+| `/attachments` | File uploads |
+| `/zoom` | Zoom integration |
+| `/ka` | Ka / topics |
+| `/search` | Global search |
+| `/top-students` | Top performers |
+
+---
+
+## Troubleshooting
+
+### `column users.user_code does not exist`
+
+```bash
+alembic upgrade head
+```
+
+### `No module named 'app'`
+
+Make sure you are in `nsApp/` and venv is activated.
+
+### `OperationalError: connection to server`
+
+Ensure PostgreSQL is running and `.env` credentials are correct.
