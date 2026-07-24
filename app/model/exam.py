@@ -1,43 +1,25 @@
-import uuid
-import secrets
-
-from sqlalchemy import Enum as SAEnum
-
-from datetime import datetime
-from app.core.constants import *
-from app.core.enums import *
-from app.core.mixins import *
-from app.helpers.code_generators import *
-from app.helpers.validators import Validators
-from app.helpers.date_utils import DateUtils
-from app.helpers.security import SecurityUtils
-
-
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Float,
     Boolean,
+    Column,
     Date,
     DateTime,
-    Time,
-    Text,
+    Float,
     ForeignKey,
-    UniqueConstraint,
-    CheckConstraint,
     Index,
-    Numeric
-
+    Integer,
+    String,
+    Text,
+    Time,
+    UniqueConstraint,
 )
-
-from sqlalchemy.orm import (
-    relationship,
-    declared_attr
-)
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.orm import relationship
 
 from app.api.database import Base
-
+from app.core.constants import MAX_CODE_LENGTH
+from app.core.enums import ExamStatus
+from app.core.mixins import ActiveMixin, TimestampMixin
+from app.helpers.code_generators import generate_exam_code, generate_exam_result_code
 
 # ============================================================
 # AUTO TABLENAME
@@ -48,290 +30,127 @@ from app.api.database import Base
 # EXAM TABLE
 # ============================================================
 
-class Exam(
 
-    Base,
-
-    TimestampMixin,
-
-    ActiveMixin
-
-):
-
+class Exam(Base, TimestampMixin, ActiveMixin):
     __tablename__ = "exams"
 
-    id = Column(
-        Integer,
-        primary_key=True
-    )
-
-    exam_id = Column(
-
-        String(30),
-
-        unique=True,
-
-        nullable=False,
-
-        default=generate_exam_code,
-
-        index=True
-
-    )
+    exam_code = Column(String(30), primary_key=True, default=generate_exam_code)
 
     # =====================================================
     # Academic
     # =====================================================
 
     academic_sessions_id = Column(
-
-        Integer,
-
-        ForeignKey("academic_sessions.id"),
-
+        String(MAX_CODE_LENGTH),
+        ForeignKey("academic_sessions.session_code"),
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
     classroom_id = Column(
-
-        Integer,
-
-        ForeignKey("classroom.id"),
-
+        String(30),
+        ForeignKey("classroom.class_code"),
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
     class_subject_id = Column(
-
-        Integer,
-
-        ForeignKey("class_subjects.id"),
-
+        String(30),
+        ForeignKey("class_subjects.class_subject_code"),
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
     teacher_subject_id = Column(
-
-        Integer,
-
-        ForeignKey("teacher_subjects.id"),
-
+        String(30),
+        ForeignKey("teacher_subjects.teacher_subject_code"),
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
     # =====================================================
     # Exam Details
     # =====================================================
 
-    exam_name = Column(
+    exam_name = Column(String(150), nullable=False)
 
-        String(150),
+    exam_type = Column(String(50), nullable=False)
 
-        nullable=False
+    description = Column(Text)
 
-    )
+    exam_date = Column(Date, nullable=False, index=True)
 
-    exam_type = Column(
+    start_time = Column(Time)
 
-        String(50),
+    end_time = Column(Time)
 
-        nullable=False
+    duration_minutes = Column(Integer)
 
-    )
-
-    description = Column(
-
-        Text
-
-    )
-
-    exam_date = Column(
-
-        Date,
-
-        nullable=False,
-
-        index=True
-
-    )
-
-    start_time = Column(
-
-        Time
-
-    )
-
-    end_time = Column(
-
-        Time
-
-    )
-
-    duration_minutes = Column(
-
-        Integer
-
-    )
-
-    room_number = Column(
-
-        String(50)
-
-    )
+    room_number = Column(String(50))
 
     # =====================================================
     # Marks
     # =====================================================
 
-    total_marks = Column(
+    total_marks = Column(Float, nullable=False)
 
-        Float,
-
-        nullable=False
-
-    )
-
-    passing_marks = Column(
-
-        Float,
-
-        nullable=False
-
-    )
+    passing_marks = Column(Float, nullable=False)
 
     # =====================================================
     # Status
     # =====================================================
 
     status = Column(
-
         SAEnum(ExamStatus),
-
         default=ExamStatus.DRAFT,
-
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
-    publish_at = Column(
+    publish_at = Column(DateTime)
 
-        DateTime
-
-    )
-
-    completed_at = Column(
-
-        DateTime
-
-    )
+    completed_at = Column(DateTime)
 
     # =====================================================
     # Statistics
     # =====================================================
 
-    total_students = Column(
+    total_students = Column(Integer, default=0)
 
-        Integer,
-
-        default=0
-
-    )
-
-    result_uploaded = Column(
-
-        Integer,
-
-        default=0
-
-    )
+    result_uploaded = Column(Integer, default=0)
 
     # =====================================================
     # Audit
     # =====================================================
 
-    created_by = Column(
+    created_by = Column(String(30), ForeignKey("users.user_code"), nullable=False)
 
-        Integer,
+    updated_by = Column(String(30), ForeignKey("users.user_code"))
 
-        ForeignKey("users.id"),
-
-        nullable=False
-
-    )
-
-    updated_by = Column(
-
-        Integer,
-
-        ForeignKey("users.id")
-
-    )
-
-    deleted_by = Column(
-
-        Integer,
-
-        ForeignKey("users.id")
-
-    )
+    deleted_by = Column(String(30), ForeignKey("users.user_code"))
 
     # =====================================================
     # Relationships
     # =====================================================
 
-    academic_sessions = relationship(
-        "AcademicSession"
-    )
+    academic_sessions = relationship("AcademicSession")
 
-    classroom = relationship(
-        "ClassRoom"
-    )
+    classroom = relationship("ClassRoom")
 
-    class_subject = relationship(
-        "ClassSubject"
-    )
+    class_subject = relationship("ClassSubject")
 
-    teacher_subject = relationship(
-        "TeacherSubject"
-    )
+    teacher_subject = relationship("TeacherSubject")
 
-    creator = relationship(
-        "User",
-        foreign_keys=[created_by]
-    )
+    creator = relationship("User", foreign_keys=[created_by])
 
-    updater = relationship(
-        "User",
-        foreign_keys=[updated_by]
-    )
+    updater = relationship("User", foreign_keys=[updated_by])
 
-    deleter = relationship(
-        "User",
-        foreign_keys=[deleted_by]
-    )
+    deleter = relationship("User", foreign_keys=[deleted_by])
 
     results = relationship(
-
         "ExamResult",
-
         back_populates="exam",
-
-        cascade="all, delete-orphan"
-
+        cascade="all, delete-orphan",
     )
 
     # =====================================================
@@ -339,39 +158,9 @@ class Exam(
     # =====================================================
 
     __table_args__ = (
-
-        UniqueConstraint(
-
-            "class_subject_id",
-
-            "exam_name",
-
-            "exam_date",
-
-            name="uq_exam"
-
-        ),
-
-        Index(
-
-            "idx_exam_class",
-
-            "classroom_id",
-
-            "exam_date"
-
-        ),
-
-        Index(
-
-            "idx_exam_teacher",
-
-            "teacher_subject_id",
-
-            "status"
-
-        ),
-
+        UniqueConstraint("class_subject_id", "exam_name", "exam_date", name="uq_exam"),
+        Index("idx_exam_class", "classroom_id", "exam_date"),
+        Index("idx_exam_teacher", "teacher_subject_id", "status"),
     )
 
 
@@ -379,163 +168,50 @@ class Exam(
 # EXAMRESULT TABLE
 # ============================================================
 
-class ExamResult(
 
-    Base,
-
-    TimestampMixin,
-
-    ActiveMixin
-
-):
-
+class ExamResult(Base, TimestampMixin, ActiveMixin):
     __tablename__ = "exam_results"
 
-    id = Column(
-        Integer,
-        primary_key=True
-    )
+    exam_result_code = Column(String(30), primary_key=True, default=generate_exam_result_code)
 
     exam_id = Column(
-
-        Integer,
-
-        ForeignKey(
-            "exams.id"
-        ),
-
+        String(30),
+        ForeignKey("exams.exam_code"),
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
     student_class_id = Column(
-
-        Integer,
-
-        ForeignKey(
-            "student_classes.id"
-        ),
-
+        String(30),
+        ForeignKey("student_classes.student_class_code"),
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
-    obtained_marks = Column(
+    obtained_marks = Column(Float, nullable=False, default=0)
 
-        Float,
+    percentage = Column(Float, default=0)
 
-        nullable=False,
+    grade = Column(String(10))
 
-        default=0
+    remarks = Column(Text)
 
-    )
+    rank_in_class = Column(Integer)
 
-    percentage = Column(
+    is_absent = Column(Boolean, default=False)
 
-        Float,
+    checked_by = Column(String(30), ForeignKey("users.user_code"))
 
-        default=0
+    checked_at = Column(DateTime)
 
-    )
+    exam = relationship("Exam", back_populates="results")
 
-    grade = Column(
+    student_class = relationship("StudentClass")
 
-        String(10)
-
-    )
-
-    remarks = Column(
-
-        Text
-
-    )
-
-    rank_in_class = Column(
-
-        Integer
-
-    )
-
-    is_absent = Column(
-
-        Boolean,
-
-        default=False
-
-    )
-
-    checked_by = Column(
-
-        Integer,
-
-        ForeignKey(
-            "users.id"
-        )
-
-    )
-
-    checked_at = Column(
-
-        DateTime
-
-    )
-
-    exam = relationship(
-
-        "Exam",
-
-        back_populates="results"
-
-    )
-
-    student_class = relationship(
-
-        "StudentClass"
-
-    )
-
-    checker = relationship(
-
-        "User"
-
-    )
+    checker = relationship("User")
 
     __table_args__ = (
-
-        UniqueConstraint(
-
-            "exam_id",
-
-            "student_class_id",
-
-            name="uq_exam_result"
-
-        ),
-
-        Index(
-
-            "idx_exam_result",
-
-            "student_class_id",
-
-            "exam_id"
-
-        ),
-
-        Index(
-
-            "idx_exam_rank",
-
-            "exam_id",
-
-            "rank_in_class"
-
-        ),
-
+        UniqueConstraint("exam_id", "student_class_id", name="uq_exam_result"),
+        Index("idx_exam_result", "student_class_id", "exam_id"),
+        Index("idx_exam_rank", "exam_id", "rank_in_class"),
     )
-
-

@@ -24,12 +24,10 @@
 # )
 
 
-
 # router = APIRouter(
 #     prefix="/daily-class",
 #     tags=["Daily Class"]
 # )
-
 
 
 # # =====================================================
@@ -245,7 +243,7 @@
 
 #             func.lower(Subject.subject_name)
 #             == subject_name.strip().lower()
-        
+
 #         )
 
 #         .order_by(
@@ -311,7 +309,6 @@
 
 #         .all()
 #     )
-
 
 
 # @router.delete(
@@ -381,28 +378,30 @@
 # routers/daily_class_routers.py - Daily Class Routes
 # ============================================================
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from datetime import UTC, date, datetime
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import date, datetime
 
 from app.api.database import get_db
-from app.model import User, DailyClass,TeacherProfile, ClassRoom, TeacherSubject, StudentClass, DailyClassStudent
+from app.core.enums import LectureStatus, UserRole
+from app.dependencies import get_current_user, require_role
+from app.model import (
+    DailyClass,
+    DailyClassStudent,
+    StudentClass,
+    TeacherProfile,
+    TeacherSubject,
+    User,
+)
 from app.schemas import (
-    DailyClassResponse,
     DailyClassCreate,
-    DailyClassUpdate,
-    DailyClassStudentResponse,
+    DailyClassResponse,
     DailyClassStudentCreate,
-    DailyClassStudentUpdate,
-    ClassRoomMinResponse
+    DailyClassStudentResponse,
+    DailyClassUpdate,
 )
-from app.dependencies import (
-    get_current_user,
-    get_current_teacher_profile,
-    require_role
-)
-from app.core.enums import UserRole, LectureStatus, AttendanceStatus
 
 router = APIRouter(prefix="/daily-class", tags=["Daily Class"])
 
@@ -410,49 +409,58 @@ router = APIRouter(prefix="/daily-class", tags=["Daily Class"])
 # DAILY CLASS CRUD
 # ============================================================
 
+
 @router.post("/", response_model=DailyClassResponse)
 async def create_daily_class(
     class_data: DailyClassCreate,
-    current_user: User = Depends(require_role(UserRole.TEACHER)),
-    db: Session = Depends(get_db)
+    current_user: Annotated[User, Depends(require_role(UserRole.TEACHER))],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Create a daily class.
-    """
-    teacher = db.query(TeacherProfile).filter(
-        TeacherProfile.user_id == current_user.id
-    ).first()
-    
+    """Create a daily class."""
+    teacher = (
+        db.query(TeacherProfile)
+        .filter(TeacherProfile.user_id == current_user.id)
+        .first()
+    )
+
     if not teacher:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Teacher profile not found"
+            detail="Teacher profile not found",
         )
-    
+
     # Verify teacher is assigned to this class
-    teacher_subject = db.query(TeacherSubject).filter(
-        TeacherSubject.id == class_data.teacher_subject_id,
-        TeacherSubject.teacher_id == teacher.teacher_id
-    ).first()
-    
+    teacher_subject = (
+        db.query(TeacherSubject)
+        .filter(
+            TeacherSubject.id == class_data.teacher_subject_id,
+            TeacherSubject.teacher_id == teacher.teacher_id,
+        )
+        .first()
+    )
+
     if not teacher_subject:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not assigned to this class"
+            detail="You are not assigned to this class",
         )
-    
+
     # Check if class already exists for this date
-    existing = db.query(DailyClass).filter(
-        DailyClass.teacher_subject_id == class_data.teacher_subject_id,
-        DailyClass.class_date == class_data.class_date
-    ).first()
-    
+    existing = (
+        db.query(DailyClass)
+        .filter(
+            DailyClass.teacher_subject_id == class_data.teacher_subject_id,
+            DailyClass.class_date == class_data.class_date,
+        )
+        .first()
+    )
+
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Class already exists for this date"
+            detail="Class already exists for this date",
         )
-    
+
     new_class = DailyClass(
         daily_class_id=class_data.daily_class_id,
         academic_sessions_id=class_data.academic_sessions_id,
@@ -468,202 +476,169 @@ async def create_daily_class(
         started_at=class_data.started_at,
         ended_at=class_data.ended_at,
         total_minutes=class_data.total_minutes,
-        remarks=class_data.remarks
+        remarks=class_data.remarks,
     )
-    
+
     db.add(new_class)
     db.commit()
     db.refresh(new_class)
-    
+
     return DailyClassResponse.model_validate(new_class)
 
-@router.get("/", response_model=List[DailyClassResponse])
-async def get_daily_classes(
-    classroom_id: Optional[int] = None,
-    class_date: Optional[date] = None,
-    lecture_status: Optional[LectureStatus] = None,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+
+@router.get("/classroom/{classroom_id}/summary")
+async def get_class_summary(
+    classroom_id: str,
+    start_date: date,
+    end_date: date,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Get daily classes with filters.
-    """
+    """Get class summary for a date range."""
+    classes = (
+        db.query(DailyClass)
+        .filter(
+            DailyClass.classroom_id == classroom_id,
+            DailyClass.class_date >= start_date,
+            DailyClass.class_date <= end_date,
+        )
+        .all()
+    )
+
+    total_classes = len(classes)
+    completed = len([c for c in classes if c.lecture_status == LectureStatus.COMPLETED])
+    cancelled = len([c for c in classes if c.lecture_status == LectureStatus.CANCELLED])
+
+    return {
+        "classroom_id": classroom_id,
+        "start_date": start_date,
+        "end_date": end_date,
+        "total_classes": total_classes,
+        "completed": completed,
+        "cancelled": cancelled,
+        "attendance_average": 0,
+    }
+
+
+@router.get("/", response_model=list[DailyClassResponse])
+async def get_daily_classes(
+    classroom_id: str | None = None,
+    class_date: date | None = None,
+    lecture_status: LectureStatus | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get daily classes with filters."""
     query = db.query(DailyClass)
-    
+
     if classroom_id:
         query = query.filter(DailyClass.classroom_id == classroom_id)
-    
+
     if class_date:
         query = query.filter(DailyClass.class_date == class_date)
-    
+
     if lecture_status:
         query = query.filter(DailyClass.lecture_status == lecture_status)
-    
-    # For teachers, only show their classes
+
     if current_user.role == UserRole.TEACHER:
-        teacher = db.query(TeacherProfile).filter(
-            TeacherProfile.user_id == current_user.id
-        ).first()
+        teacher = (
+            db.query(TeacherProfile)
+            .filter(TeacherProfile.user_id == current_user.id)
+            .first()
+        )
         if teacher:
             teacher_subject_ids = db.query(TeacherSubject.id).filter(
-                TeacherSubject.teacher_id == teacher.teacher_id
+                TeacherSubject.teacher_id == teacher.teacher_id,
             )
             query = query.filter(DailyClass.teacher_subject_id.in_(teacher_subject_ids))
-    
+
     classes = query.order_by(DailyClass.class_date.desc()).all()
     return [DailyClassResponse.model_validate(c) for c in classes]
+
+
+# ============================================================
+# IMPORTANT: {daily_class_id} routes must come AFTER specific
+# paths like /classroom/{classroom_id}/summary
+# ============================================================
+
 
 @router.get("/{daily_class_id}", response_model=DailyClassResponse)
 async def get_daily_class(
     daily_class_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Get daily class by ID.
-    """
-    daily_class = db.query(DailyClass).filter(
-        DailyClass.id == daily_class_id
-    ).first()
-    
+    daily_class = db.query(DailyClass).filter(DailyClass.id == daily_class_id).first()
+
     if not daily_class:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Class not found"
+            detail="Class not found",
         )
-    
+
     return DailyClassResponse.model_validate(daily_class)
 
-@router.put("/{daily_class_id}", response_model=DailyClassResponse)
-async def update_daily_class(
-    daily_class_id: int,
-    class_data: DailyClassUpdate,
-    current_user: User = Depends(require_role(UserRole.TEACHER)),
-    db: Session = Depends(get_db)
-):
-    """
-    Update daily class.
-    """
-    daily_class = db.query(DailyClass).filter(
-        DailyClass.id == daily_class_id
-    ).first()
-    
-    if not daily_class:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Class not found"
-        )
-    
-    teacher = db.query(TeacherProfile).filter(
-        TeacherProfile.user_id == current_user.id
-    ).first()
-    
-    if teacher and daily_class.teacher_subject_id != teacher.teacher_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only update your own classes"
-        )
-    
-    for key, value in class_data.dict(exclude_unset=True).items():
-        setattr(daily_class, key, value)
-    
-    db.commit()
-    db.refresh(daily_class)
-    
-    return DailyClassResponse.model_validate(daily_class)
 
-@router.delete("/{daily_class_id}")
-async def delete_daily_class(
-    daily_class_id: int,
-    current_user: User = Depends(require_role(UserRole.TEACHER)),
-    db: Session = Depends(get_db)
-):
-    """
-    Delete daily class.
-    """
-    daily_class = db.query(DailyClass).filter(
-        DailyClass.id == daily_class_id
-    ).first()
-    
-    if not daily_class:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Class not found"
-        )
-    
-    teacher = db.query(TeacherProfile).filter(
-        TeacherProfile.user_id == current_user.id
-    ).first()
-    
-    if teacher and daily_class.teacher_subject_id != teacher.teacher_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only delete your own classes"
-        )
-    
-    db.delete(daily_class)
-    db.commit()
-    
-    return {"success": True, "message": "Class deleted successfully"}
-
-# ============================================================
-# ATTENDANCE MANAGEMENT
-# ============================================================
-
-@router.post("/{daily_class_id}/students", response_model=List[DailyClassStudentResponse])
+@router.post(
+    "/{daily_class_id}/students",
+    response_model=list[DailyClassStudentResponse],
+)
 async def mark_attendance(
     daily_class_id: int,
-    attendance_data: List[DailyClassStudentCreate],
-    current_user: User = Depends(require_role(UserRole.TEACHER)),
-    db: Session = Depends(get_db)
+    attendance_data: list[DailyClassStudentCreate],
+    current_user: Annotated[User, Depends(require_role(UserRole.TEACHER))],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Mark attendance for students in a daily class.
-    """
-    daily_class = db.query(DailyClass).filter(
-        DailyClass.id == daily_class_id
-    ).first()
-    
+    daily_class = db.query(DailyClass).filter(DailyClass.id == daily_class_id).first()
+
     if not daily_class:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Class not found"
+            detail="Class not found",
         )
-    
-    teacher = db.query(TeacherProfile).filter(
-        TeacherProfile.user_id == current_user.id
-    ).first()
-    
+
+    teacher = (
+        db.query(TeacherProfile)
+        .filter(TeacherProfile.user_id == current_user.id)
+        .first()
+    )
+
     if teacher and daily_class.teacher_subject_id != teacher.teacher_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only mark attendance for your classes"
+            detail="You can only mark attendance for your classes",
         )
-    
+
     marked_records = []
     for item in attendance_data:
-        # Check if student exists
-        student_class = db.query(StudentClass).filter(
-            StudentClass.id == item.student_class_id,
-            StudentClass.classroom_id == daily_class.classroom_id
-        ).first()
-        
+        student_class = (
+            db.query(StudentClass)
+            .filter(
+                StudentClass.id == item.student_class_id,
+                StudentClass.classroom_id == daily_class.classroom_id,
+            )
+            .first()
+        )
+
         if not student_class:
             continue
-        
-        # Create or update attendance record
-        existing = db.query(DailyClassStudent).filter(
-            DailyClassStudent.daily_class_id == daily_class_id,
-            DailyClassStudent.student_class_id == item.student_class_id
-        ).first()
-        
+
+        existing = (
+            db.query(DailyClassStudent)
+            .filter(
+                DailyClassStudent.daily_class_id == daily_class_id,
+                DailyClassStudent.student_class_id == item.student_class_id,
+            )
+            .first()
+        )
+
         if existing:
             existing.attendance_status = item.attendance_status
             existing.is_late = item.is_late
             existing.late_minutes = item.late_minutes
             existing.remarks = item.remarks
             existing.marked_by = current_user.id
-            existing.marked_at = datetime.utcnow()
+            existing.marked_at = datetime.now(UTC)
             marked_records.append(existing)
         else:
             new_record = DailyClassStudent(
@@ -673,71 +648,105 @@ async def mark_attendance(
                 is_late=item.is_late,
                 late_minutes=item.late_minutes,
                 remarks=item.remarks,
-                marked_by=current_user.id
+                marked_by=current_user.id,
             )
             db.add(new_record)
             marked_records.append(new_record)
-    
+
     db.commit()
-    
+
     return [DailyClassStudentResponse.model_validate(r) for r in marked_records]
 
-@router.get("/{daily_class_id}/students", response_model=List[DailyClassStudentResponse])
+
+@router.get(
+    "/{daily_class_id}/students",
+    response_model=list[DailyClassStudentResponse],
+)
 async def get_attendance(
     daily_class_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Get attendance for a daily class.
-    """
-    daily_class = db.query(DailyClass).filter(
-        DailyClass.id == daily_class_id
-    ).first()
-    
+    daily_class = db.query(DailyClass).filter(DailyClass.id == daily_class_id).first()
+
     if not daily_class:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Class not found"
+            detail="Class not found",
         )
-    
-    attendance = db.query(DailyClassStudent).filter(
-        DailyClassStudent.daily_class_id == daily_class_id
-    ).all()
-    
+
+    attendance = (
+        db.query(DailyClassStudent)
+        .filter(DailyClassStudent.daily_class_id == daily_class_id)
+        .all()
+    )
+
     return [DailyClassStudentResponse.model_validate(a) for a in attendance]
 
-# ============================================================
-# CLASS DASHBOARD
-# ============================================================
 
-@router.get("/classroom/{classroom_id}/summary")
-async def get_class_summary(
-    classroom_id: int,
-    start_date: date,
-    end_date: date,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+@router.put("/{daily_class_id}", response_model=DailyClassResponse)
+async def update_daily_class(
+    daily_class_id: int,
+    class_data: DailyClassUpdate,
+    current_user: Annotated[User, Depends(require_role(UserRole.TEACHER))],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Get class summary for a date range.
-    """
-    classes = db.query(DailyClass).filter(
-        DailyClass.classroom_id == classroom_id,
-        DailyClass.class_date >= start_date,
-        DailyClass.class_date <= end_date
-    ).all()
-    
-    total_classes = len(classes)
-    completed = len([c for c in classes if c.lecture_status == LectureStatus.COMPLETED])
-    cancelled = len([c for c in classes if c.lecture_status == LectureStatus.CANCELLED])
-    
-    return {
-        "classroom_id": classroom_id,
-        "start_date": start_date,
-        "end_date": end_date,
-        "total_classes": total_classes,
-        "completed": completed,
-        "cancelled": cancelled,
-        "attendance_average": 0  # Calculate from attendance records
-    }
+    daily_class = db.query(DailyClass).filter(DailyClass.id == daily_class_id).first()
+
+    if not daily_class:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Class not found",
+        )
+
+    teacher = (
+        db.query(TeacherProfile)
+        .filter(TeacherProfile.user_id == current_user.id)
+        .first()
+    )
+
+    if teacher and daily_class.teacher_subject_id != teacher.teacher_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own classes",
+        )
+
+    for key, value in class_data.dict(exclude_unset=True).items():
+        setattr(daily_class, key, value)
+
+    db.commit()
+    db.refresh(daily_class)
+
+    return DailyClassResponse.model_validate(daily_class)
+
+
+@router.delete("/{daily_class_id}")
+async def delete_daily_class(
+    daily_class_id: int,
+    current_user: Annotated[User, Depends(require_role(UserRole.TEACHER))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    daily_class = db.query(DailyClass).filter(DailyClass.id == daily_class_id).first()
+
+    if not daily_class:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Class not found",
+        )
+
+    teacher = (
+        db.query(TeacherProfile)
+        .filter(TeacherProfile.user_id == current_user.id)
+        .first()
+    )
+
+    if teacher and daily_class.teacher_subject_id != teacher.teacher_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete your own classes",
+        )
+
+    db.delete(daily_class)
+    db.commit()
+
+    return {"success": True, "message": "Class deleted successfully"}

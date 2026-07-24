@@ -1,14 +1,14 @@
-import os
+from pathlib import Path
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.database import get_db
-from app.dependencies import get_current_user, require_role
 from app.core.enums import UserRole
-
+from app.dependencies import get_current_user, require_role
 from app.services.student_id_card_service import StudentIDCardService
-
 
 router = APIRouter(prefix="/student", tags=["Student ID Card"])
 
@@ -22,12 +22,18 @@ async def generate_id_card(
 ):
     """ADMIN generates or regenerates student's ID card.
 
-    `student_id` ab id, email, ya naam - teeno accept karta hai."""
+    `student_id` ab id, email, ya naam - teeno accept karta hai.
+    """
     from app.services.identifier_resolver_service import IdentifierResolverService
+
     student_id = IdentifierResolverService(db).resolve_student_id(student_id)
 
     service = StudentIDCardService(db)
-    card = service.generate_or_regenerate_card(student_id=student_id, admin_user=current_user, regenerate=regenerate)
+    card = service.generate_or_regenerate_card(
+        student_id=student_id,
+        admin_user=current_user,
+        regenerate=regenerate,
+    )
     return {
         "success": True,
         "card_id": card.id,
@@ -46,8 +52,10 @@ async def view_id_card(
 ):
     """VIEW allowed for Admin/Teacher/Student (student can view own only).
 
-    `student_id` ab id, email, ya naam - teeno accept karta hai."""
+    `student_id` ab id, email, ya naam - teeno accept karta hai.
+    """
     from app.services.identifier_resolver_service import IdentifierResolverService
+
     student_id = IdentifierResolverService(db).resolve_student_id(student_id)
 
     service = StudentIDCardService(db)
@@ -80,8 +88,10 @@ async def download_id_card(
 ):
     """Download generated PDF (front side only).
 
-    `student_id` ab id, email, ya naam - teeno accept karta hai."""
+    `student_id` ab id, email, ya naam - teeno accept karta hai.
+    """
     from app.services.identifier_resolver_service import IdentifierResolverService
+
     student_id = IdentifierResolverService(db).resolve_student_id(student_id)
 
     service = StudentIDCardService(db)
@@ -92,10 +102,10 @@ async def download_id_card(
 
     # card.pdf_path is stored as relative path under repo or absolute depending on generator.
     path = card.pdf_path
-    if not os.path.isabs(path):
-        path = os.path.join(os.getcwd(), path)
+    if not Path(path).is_absolute():
+        path = str(Path.cwd() / path)
 
-    if not os.path.exists(path):
+    if not Path(path).exists():
         raise HTTPException(status_code=404, detail="PDF file not found on disk")
 
     filename = f"student_id_card_{student_id}.pdf"
@@ -104,8 +114,8 @@ async def download_id_card(
 
 @router.get("/id-card/all")
 async def list_all_cards(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     current_user=Depends(require_role(UserRole.ADMIN)),
     db: Session = Depends(get_db),
 ):
@@ -143,4 +153,3 @@ async def list_all_cards(
             "total_pages": (total + page_size - 1) // page_size,
         },
     }
-

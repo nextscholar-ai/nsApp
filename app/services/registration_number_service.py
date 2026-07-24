@@ -1,11 +1,11 @@
-from datetime import date
+from datetime import UTC, datetime
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.model import StudentProfile
 from app.helpers.code_generators import generate_registration_number
+from app.model import StudentProfile
 
 
 class RegistrationNumberService:
@@ -21,7 +21,7 @@ class RegistrationNumberService:
 
     MAX_ATTEMPTS = 5
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     def _next_sequence_for_year(self, year: int) -> int:
@@ -33,14 +33,19 @@ class RegistrationNumberService:
         ) or 0
         return count + 1
 
-    def generate_for_student(self, student: StudentProfile, *, commit: bool = True) -> str:
+    def generate_for_student(
+        self,
+        student: StudentProfile,
+        *,
+        commit: bool = True,
+    ) -> str:
         """Assigns a registration_number to `student` if it doesn't already
         have one. Returns the (possibly pre-existing) registration_number.
         """
         if student.registration_number:
             return student.registration_number
 
-        year = date.today().year
+        year = datetime.now(UTC).date().year
         last_error = None
 
         for attempt in range(self.MAX_ATTEMPTS):
@@ -61,9 +66,12 @@ class RegistrationNumberService:
                 last_error = exc
                 continue
 
-        raise RuntimeError(
+        msg = (
             f"Could not generate a unique registration number after "
             f"{self.MAX_ATTEMPTS} attempts"
+        )
+        raise RuntimeError(
+            msg,
         ) from last_error
 
     def backfill_missing_registration_numbers(self) -> dict:
@@ -86,4 +94,8 @@ class RegistrationNumberService:
                 self.db.rollback()
                 failed += 1
 
-        return {"generated": generated, "failed": failed, "total_missing": len(students)}
+        return {
+            "generated": generated,
+            "failed": failed,
+            "total_missing": len(students),
+        }

@@ -29,17 +29,16 @@
 #
 # ============================================================
 
-from typing import List
-from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
 
-from app.model import User, StudentProfile, TeacherProfile, StudentClass, ClassRoom
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from app.core.exceptions import AmbiguousIdentifierError, IdentifierNotFoundError
+from app.model import ClassRoom, StudentClass, StudentProfile, TeacherProfile, User
 
 
 class IdentifierResolverService:
-
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     # ------------------------------------------------------------
@@ -49,10 +48,11 @@ class IdentifierResolverService:
     def resolve_student(self, identifier: str) -> StudentProfile:
         """Accepts student_id, email, or student_name. Returns the
         matching StudentProfile, or raises IdentifierNotFoundError /
-        AmbiguousIdentifierError."""
-
+        AmbiguousIdentifierError.
+        """
         if identifier is None or not identifier.strip():
-            raise IdentifierNotFoundError("Student identifier is empty")
+            msg = "Student identifier is empty"
+            raise IdentifierNotFoundError(msg)
 
         value = identifier.strip()
 
@@ -79,7 +79,7 @@ class IdentifierResolverService:
             return student
 
         # 3) Name match
-        matches: List[StudentProfile] = (
+        matches: list[StudentProfile] = (
             self.db.query(StudentProfile)
             .filter(func.lower(StudentProfile.student_name) == value.lower())
             .all()
@@ -96,15 +96,17 @@ class IdentifierResolverService:
             )
 
         if not matches:
+            msg = f"No student found matching '{identifier}' (tried id, email, name)"
             raise IdentifierNotFoundError(
-                f"No student found matching '{identifier}' (tried id, email, name)"
+                msg,
             )
 
         if len(matches) == 1:
             return matches[0]
 
+        msg = f"'{identifier}' matches {len(matches)} students. Please pick one."
         raise AmbiguousIdentifierError(
-            f"'{identifier}' matches {len(matches)} students. Please pick one.",
+            msg,
             candidates=[self._student_candidate(s) for s in matches],
         )
 
@@ -117,8 +119,11 @@ class IdentifierResolverService:
 
         active_class = (
             self.db.query(ClassRoom.display_name)
-            .join(StudentClass, StudentClass.classroom_id == ClassRoom.id)
-            .filter(StudentClass.student_id == student.student_id, StudentClass.status == "ACTIVE")
+            .join(StudentClass, StudentClass.classroom_id == ClassRoom.class_code)
+            .filter(
+                StudentClass.student_id == student.student_id,
+                StudentClass.status == "ACTIVE",
+            )
             .order_by(StudentClass.admission_date.desc())
             .first()
         )
@@ -138,10 +143,11 @@ class IdentifierResolverService:
     def resolve_teacher(self, identifier: str) -> TeacherProfile:
         """Accepts teacher_id, email, or teacher_name. Returns the
         matching TeacherProfile, or raises IdentifierNotFoundError /
-        AmbiguousIdentifierError."""
-
+        AmbiguousIdentifierError.
+        """
         if identifier is None or not identifier.strip():
-            raise IdentifierNotFoundError("Teacher identifier is empty")
+            msg = "Teacher identifier is empty"
+            raise IdentifierNotFoundError(msg)
 
         value = identifier.strip()
 
@@ -165,7 +171,7 @@ class IdentifierResolverService:
             return teacher
 
         # 3) Name match
-        matches: List[TeacherProfile] = (
+        matches: list[TeacherProfile] = (
             self.db.query(TeacherProfile)
             .filter(func.lower(TeacherProfile.teacher_name) == value.lower())
             .all()
@@ -179,15 +185,17 @@ class IdentifierResolverService:
             )
 
         if not matches:
+            msg = f"No teacher found matching '{identifier}' (tried id, email, name)"
             raise IdentifierNotFoundError(
-                f"No teacher found matching '{identifier}' (tried id, email, name)"
+                msg,
             )
 
         if len(matches) == 1:
             return matches[0]
 
+        msg = f"'{identifier}' matches {len(matches)} teachers. Please pick one."
         raise AmbiguousIdentifierError(
-            f"'{identifier}' matches {len(matches)} teachers. Please pick one.",
+            msg,
             candidates=[self._teacher_candidate(t) for t in matches],
         )
 

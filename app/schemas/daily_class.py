@@ -2,121 +2,117 @@
 # schemas.py - Production Ready & Aligned with models.py
 # ============================================================
 
-from pydantic import BaseModel, Field, EmailStr, field_validator, model_validator
-from typing import Optional, Generic, TypeVar, List, Dict, Any, Union
-from datetime import datetime, date, time
-from decimal import Decimal
-from  enum import Enum
+from datetime import date, datetime
+from typing import TypeVar
 
-from app.core.enums import (
-    UserRole, 
-    AssignmentStatus, 
-    ExamStatus, 
-    FeeStatus,
-    NoticeType,
-    NoticeAudience,
-    MaterialType,
-    AttendanceStatus,
-    LectureStatus,
-    PromotionType,
-    Gender
+from pydantic import Field
+
+from .common import (
+    ActiveSchema,
+    BaseSchema,
+    ClassRoomMinResponse,
+    TimestampSchema,
+    UserMinResponse,
 )
+from .teacher_student_links import StudentClassResponse
 
 # ============================================================
 # TYPE VARIABLES & BASE SCHEMAS
 # ============================================================
 
-T = TypeVar('T')
-
-
-from .common import *
-from .teacher_student_links import StudentClassResponse
-
+T = TypeVar("T")
 
 # ============================================================
 # DailyClassBase
 # ============================================================
 
+
 class DailyClassBase(BaseSchema):
     daily_class_id: str = Field(..., max_length=30)
     class_date: date
-    topic: Optional[str] = Field(None, max_length=300)
-    description: Optional[str] = None
-    homework: Optional[str] = None
+    topic: str | None = Field(None, max_length=300)
+    description: str | None = None
+    homework: str | None = None
     lecture_status: str = "Scheduled"
-    started_at: Optional[datetime] = None
-    ended_at: Optional[datetime] = None
-    total_minutes: Optional[int] = None
-    remarks: Optional[str] = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    total_minutes: int | None = None
+    remarks: str | None = None
 
 
 # ============================================================
 # DailyClassCreate
 # ============================================================
 
+
 class DailyClassCreate(DailyClassBase):
-    academic_sessions_id: int
-    classroom_id: int
+    academic_sessions_id: str
+    classroom_id: str
     class_subject_id: int
     teacher_subject_id: int
-    timetable_id: Optional[int] = None
+    timetable_id: int | None = None
 
 
 # ============================================================
 # DailyClassResponse
 # ============================================================
 
+
 class DailyClassResponse(DailyClassBase, TimestampSchema, ActiveSchema):
-    id: int
-    academic_sessions_id: int
-    classroom_id: int
-    class_subject_id: int
-    teacher_subject_id: int
-    timetable_id: Optional[int] = None
-    
-    classroom: Optional[ClassRoomMinResponse] = None
-    students: List['DailyClassStudentResponse'] = []
+    daily_class_code: str
+    academic_sessions_id: str
+    classroom_id: str
+    class_subject_id: str
+    teacher_subject_id: str
+    timetable_id: str | None = None
+
+    classroom: ClassRoomMinResponse | None = None
+    students: list["DailyClassStudentResponse"] = Field(default_factory=list)
 
 
 # ============================================================
 # DailyClassStudentBase
 # ============================================================
 
+
 class DailyClassStudentBase(BaseSchema):
     attendance_status: str = "Present"
     is_late: bool = False
     late_minutes: int = 0
-    remarks: Optional[str] = None
+    remarks: str | None = None
 
 
 # ============================================================
 # DailyClassStudentCreate
 # ============================================================
 
+
 class DailyClassStudentCreate(DailyClassStudentBase):
     daily_class_id: int
     student_class_id: int
-    marked_by: Optional[int] = None
+    marked_by: int | None = None
 
 
 # ============================================================
 # DailyClassStudentResponse
 # ============================================================
 
+
 class DailyClassStudentResponse(DailyClassStudentBase, TimestampSchema):
-    id: int
+    daily_class_student_code: str
     daily_class_id: int
-    student_class_id: int
-    marked_by: Optional[int] = None
-    marked_at: Optional[datetime] = None
-    
-    student_class: Optional[StudentClassResponse] = None
-    marker: Optional[UserMinResponse] = None
+    student_class_id: str
+    marked_by: str | None = None
+    marked_at: datetime | None = None
+
+    student_class: StudentClassResponse | None = None
+    marker: UserMinResponse | None = None
 
 
 # ============================================================
 # StudentAttendanceBase
 # ============================================================
+
 
 class StudentAttendanceBase(BaseSchema):
     total_classes: int = 0
@@ -129,35 +125,37 @@ class StudentAttendanceBase(BaseSchema):
 # StudentAttendanceResponse
 # ============================================================
 
-class StudentAttendanceResponse(StudentAttendanceBase, TimestampSchema):
-    id: Optional[int] = None
-    student_class_id: int
 
+class StudentAttendanceResponse(StudentAttendanceBase, TimestampSchema):
+    attendance_code: str | None = None
+    student_class_id: str
 
 
 # ============================================================
 # DailyClassUpdate
 # ============================================================
 
+
 class DailyClassUpdate(BaseSchema):
-    class_date: Optional[date] = None
-    topic: Optional[str] = Field(None, max_length=300)
-    description: Optional[str] = None
-    homework: Optional[str] = None
-    lecture_status: Optional[str] = None
-    started_at: Optional[datetime] = None
-    ended_at: Optional[datetime] = None
-    total_minutes: Optional[int] = None
-    remarks: Optional[str] = None
-    is_active: Optional[bool] = None
+    class_date: date | None = None
+    topic: str | None = Field(None, max_length=300)
+    description: str | None = None
+    homework: str | None = None
+    lecture_status: str | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    total_minutes: int | None = None
+    remarks: str | None = None
+    is_active: bool | None = None
 
 
 # ============================================================
 # DailyClassStudentUpdate
 # ============================================================
 
+
 class DailyClassStudentUpdate(BaseSchema):
-    attendance_status: Optional[str] = None
-    is_late: Optional[bool] = None
-    late_minutes: Optional[int] = None
-    remarks: Optional[str] = None
+    attendance_status: str | None = None
+    is_late: bool | None = None
+    late_minutes: int | None = None
+    remarks: str | None = None

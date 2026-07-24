@@ -1,9 +1,7 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.api.config import settings
-
 
 engine = create_engine(
     settings.DATABASE_URL,
@@ -36,6 +34,7 @@ def get_db():
 def test_db_connection() -> bool:
     """Return True if a basic query against the database succeeds."""
     from sqlalchemy import text
+
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))

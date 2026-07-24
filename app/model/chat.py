@@ -1,43 +1,20 @@
-import uuid
-import secrets
-
-from sqlalchemy import Enum
-
-from datetime import datetime
-from app.core.constants import *
-from app.core.enums import *
-from app.core.mixins import *
-from app.helpers.code_generators import *
-from app.helpers.validators import Validators
-from app.helpers.date_utils import DateUtils
-from app.helpers.security import SecurityUtils
-
-
 from sqlalchemy import (
+    Boolean,
     Column,
+    DateTime,
+    ForeignKey,
+    Index,
     Integer,
     String,
-    Float,
-    Boolean,
-    Date,
-    DateTime,
-    Time,
     Text,
-    ForeignKey,
     UniqueConstraint,
-    CheckConstraint,
-    Index,
-    Numeric
-
 )
-
-from sqlalchemy.orm import (
-    relationship,
-    declared_attr
-)
+from sqlalchemy.orm import relationship
 
 from app.api.database import Base
-
+from app.core.constants import MAX_CODE_LENGTH
+from app.core.mixins import ActiveMixin, TimestampMixin
+from app.helpers.code_generators import generate_chat_message_code, generate_chat_room_code
 
 # ============================================================
 # AUTO TABLENAME
@@ -48,149 +25,56 @@ from app.api.database import Base
 # CHATROOM TABLE
 # ============================================================
 
-class ChatRoom(
 
-    Base,
-
-    TimestampMixin,
-
-    ActiveMixin
-
-):
-
+class ChatRoom(Base, TimestampMixin, ActiveMixin):
     __tablename__ = "chat_rooms"
 
-    id = Column(
-        Integer,
-        primary_key=True
-    )
-
-    chat_room_id = Column(
-
-        String(30),
-
-        unique=True,
-
-        nullable=False,
-
-        default=generate_chat_room_id,
-
-        index=True
-
-    )
+    chat_room_code = Column(String(30), primary_key=True, default=generate_chat_room_code)
 
     academic_sessions_id = Column(
-
-        Integer,
-
-        ForeignKey("academic_sessions.id"),
-
+        String(MAX_CODE_LENGTH),
+        ForeignKey("academic_sessions.session_code"),
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
     student_class_id = Column(
-
-        Integer,
-
-        ForeignKey("student_classes.id"),
-
+        String(30),
+        ForeignKey("student_classes.student_class_code"),
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
     teacher_subject_id = Column(
-
-        Integer,
-
-        ForeignKey("teacher_subjects.id"),
-
+        String(30),
+        ForeignKey("teacher_subjects.teacher_subject_code"),
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
-    last_message = Column(
+    last_message = Column(String(500))
 
-        String(500)
+    last_message_at = Column(DateTime)
 
-    )
+    student_unread = Column(Integer, default=0, nullable=False)
 
-    last_message_at = Column(
+    teacher_unread = Column(Integer, default=0, nullable=False)
 
-        DateTime
+    academic_sessions = relationship("AcademicSession")
 
-    )
+    student_class = relationship("StudentClass")
 
-    student_unread = Column(
-
-        Integer,
-
-        default=0,
-
-        nullable=False
-
-    )
-
-    teacher_unread = Column(
-
-        Integer,
-
-        default=0,
-
-        nullable=False
-
-    )
-
-    academic_sessions = relationship(
-        "AcademicSession"
-    )
-
-    student_class = relationship(
-        "StudentClass"
-    )
-
-    teacher_subject = relationship(
-        "TeacherSubject"
-    )
+    teacher_subject = relationship("TeacherSubject")
 
     messages = relationship(
-
         "ChatMessage",
-
         back_populates="chat_room",
-
-        cascade="all, delete-orphan"
-
+        cascade="all, delete-orphan",
     )
 
     __table_args__ = (
-
-        UniqueConstraint(
-
-            "student_class_id",
-
-            "teacher_subject_id",
-
-            name="uq_chat_room"
-
-        ),
-
-        Index(
-
-            "idx_chat_room",
-
-            "teacher_subject_id",
-
-            "student_class_id"
-
-        ),
-
+        UniqueConstraint("student_class_id", "teacher_subject_id", name="uq_chat_room"),
+        Index("idx_chat_room", "teacher_subject_id", "student_class_id"),
     )
 
 
@@ -198,94 +82,34 @@ class ChatRoom(
 # CHATMESSAGE TABLE
 # ============================================================
 
-class ChatMessage(
 
-    Base,
-
-    TimestampMixin,
-
-    ActiveMixin
-
-):
-
+class ChatMessage(Base, TimestampMixin, ActiveMixin):
     __tablename__ = "chat_messages"
 
-    id = Column(
-        Integer,
-        primary_key=True
-    )
+    chat_message_code = Column(String(30), primary_key=True, default=generate_chat_message_code)
 
     chat_room_id = Column(
-
-        Integer,
-
-        ForeignKey("chat_rooms.id"),
-
+        String(30),
+        ForeignKey("chat_rooms.chat_room_code"),
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
     sender_id = Column(
-
-        Integer,
-
-        ForeignKey("users.id"),
-
+        String(30),
+        ForeignKey("users.user_code"),
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
-    message = Column(
+    message = Column(Text, nullable=False)
 
-        Text,
+    is_edited = Column(Boolean, default=False)
 
-        nullable=False
+    edited_at = Column(DateTime)
 
-    )
+    chat_room = relationship("ChatRoom", back_populates="messages")
 
-    is_edited = Column(
+    sender = relationship("User")
 
-        Boolean,
-
-        default=False
-
-    )
-
-    edited_at = Column(
-
-        DateTime
-
-    )
-
-    chat_room = relationship(
-
-        "ChatRoom",
-
-        back_populates="messages"
-
-    )
-
-    sender = relationship(
-
-        "User"
-
-    )
-
-    __table_args__ = (
-
-        Index(
-
-            "idx_chat_message",
-
-            "chat_room_id",
-
-            "created_at"
-
-        ),
-
-    )
-
+    __table_args__ = (Index("idx_chat_message", "chat_room_id", "created_at"),)

@@ -1,43 +1,24 @@
-import uuid
-import secrets
-
-from sqlalchemy import Enum
-
 from datetime import datetime
-from app.core.constants import *
-from app.core.enums import *
-from app.core.mixins import *
-from app.helpers.code_generators import *
-from app.helpers.validators import Validators
-from app.helpers.date_utils import DateUtils
-from app.helpers.security import SecurityUtils
-
 
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Float,
     Boolean,
+    Column,
     Date,
     DateTime,
-    Time,
-    Text,
+    Float,
     ForeignKey,
-    UniqueConstraint,
-    CheckConstraint,
     Index,
-    Numeric
-
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
 )
-
-from sqlalchemy.orm import (
-    relationship,
-    declared_attr
-)
+from sqlalchemy.orm import relationship
 
 from app.api.database import Base
-
+from app.core.constants import MAX_CODE_LENGTH
+from app.core.mixins import ActiveMixin, TimestampMixin
+from app.helpers.code_generators import generate_uuid
 
 # ============================================================
 # AUTO TABLENAME
@@ -48,80 +29,55 @@ from app.api.database import Base
 # DAILYCLASS TABLE
 # ============================================================
 
-class DailyClass(Base, TimestampMixin, ActiveMixin):
 
+class DailyClass(Base, TimestampMixin, ActiveMixin):
     __tablename__ = "daily_classes"
 
-    id = Column(
-        Integer,
-        primary_key=True
-    )
-
-    daily_class_id = Column(
-        String(30),
-        unique=True,
-        nullable=False,
-        index=True
-    )
+    daily_class_code = Column(String(30), primary_key=True, default=generate_uuid)
 
     academic_sessions_id = Column(
-        Integer,
-        ForeignKey("academic_sessions.id"),
+        String(MAX_CODE_LENGTH),
+        ForeignKey("academic_sessions.session_code"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     classroom_id = Column(
-        Integer,
-        ForeignKey("classroom.id"),
+        String(30),
+        ForeignKey("classroom.class_code"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     class_subject_id = Column(
-        Integer,
-        ForeignKey("class_subjects.id"),
+        String(30),
+        ForeignKey("class_subjects.class_subject_code"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     teacher_subject_id = Column(
-        Integer,
-        ForeignKey("teacher_subjects.id"),
+        String(30),
+        ForeignKey("teacher_subjects.teacher_subject_code"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     timetable_id = Column(
-        Integer,
-        ForeignKey("class_timetable.id"),
-        nullable=True
+        String(30),
+        ForeignKey("class_timetable.timetable_code"),
+        nullable=True,
     )
 
-    class_date = Column(
-        Date,
-        nullable=False,
-        index=True
-    )
+    class_date = Column(Date, nullable=False, index=True)
 
-    topic = Column(
-        String(300)
-    )
+    topic = Column(String(300))
 
-    description = Column(
-        Text
-    )
+    description = Column(Text)
 
-    homework = Column(
-        Text
-    )
+    homework = Column(Text)
 
-    lecture_status = Column(
-        String(20),
-        default="Scheduled",
-        nullable=False,
-        index=True
-    )
+    lecture_status = Column(String(20), default="Scheduled", nullable=False, index=True)
 
     started_at = Column(DateTime)
 
@@ -131,54 +87,31 @@ class DailyClass(Base, TimestampMixin, ActiveMixin):
 
     remarks = Column(Text)
 
-    academic_sessions = relationship(
-        "AcademicSession"
-    )
+    academic_sessions = relationship("AcademicSession")
 
-    classroom = relationship(
-        "ClassRoom"
-    )
+    classroom = relationship("ClassRoom")
 
-    class_subject = relationship(
-        "ClassSubject"
-    )
+    class_subject = relationship("ClassSubject")
 
-    teacher_subject = relationship(
-        "TeacherSubject"
-    )
+    teacher_subject = relationship("TeacherSubject")
 
-    timetable = relationship(
-        "ClassTimeTable"
-    )
+    timetable = relationship("ClassTimeTable")
 
     students = relationship(
         "DailyClassStudent",
         back_populates="daily_class",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
 
-
     __table_args__ = (
-
         UniqueConstraint(
             "teacher_subject_id",
             "class_date",
             "timetable_id",
-            name="uq_daily_class"
+            name="uq_daily_class",
         ),
-
-        Index(
-            "idx_daily_classes_class_date",
-            "classroom_id",
-            "class_date"
-        ),
-
-        Index(
-            "idx_daily_classes_teacher",
-            "teacher_subject_id",
-            "class_date"
-        ),
-
+        Index("idx_daily_classes_class_date", "classroom_id", "class_date"),
+        Index("idx_daily_classes_teacher", "teacher_subject_id", "class_date"),
     )
 
 
@@ -186,86 +119,50 @@ class DailyClass(Base, TimestampMixin, ActiveMixin):
 # DAILYCLASSSTUDENT TABLE
 # ============================================================
 
-class DailyClassStudent(Base, TimestampMixin):
 
+class DailyClassStudent(Base, TimestampMixin):
     __tablename__ = "daily_class_students"
 
-    id = Column(
-        Integer,
-        primary_key=True
-    )
+    daily_class_student_code = Column(String(30), primary_key=True, default=generate_uuid)
 
     daily_class_id = Column(
-        Integer,
-        ForeignKey("daily_classes.id"),
-        nullable=False
+        String(30),
+        ForeignKey("daily_classes.daily_class_code"),
+        nullable=False,
     )
 
     student_class_id = Column(
-        Integer,
-        ForeignKey("student_classes.id"),
-        nullable=False
+        String(30),
+        ForeignKey("student_classes.student_class_code"),
+        nullable=False,
     )
 
     attendance_status = Column(
         String(20),
         nullable=False,
         default="Present",
-        index=True
+        index=True,
     )
 
-    is_late = Column(
-        Boolean,
-        default=False
-    )
+    is_late = Column(Boolean, default=False)
 
-    late_minutes = Column(
-        Integer,
-        default=0
-    )
+    late_minutes = Column(Integer, default=0)
 
-    remarks = Column(
-        Text
-    )
+    remarks = Column(Text)
 
-    marked_by = Column(
-        Integer,
-        ForeignKey("users.id")
-    )
+    marked_by = Column(String(30), ForeignKey("users.user_code"))
 
-    marked_at = Column(
-        DateTime,
-        default=datetime.utcnow
-    )
+    marked_at = Column(DateTime, default=datetime.utcnow)
 
-    daily_class = relationship(
-        "DailyClass",
-        back_populates="students"
-    )
+    daily_class = relationship("DailyClass", back_populates="students")
 
-    student_class = relationship(
-        "StudentClass"
-    )
+    student_class = relationship("StudentClass")
 
-    marker = relationship(
-        "User"
-    )
-
+    marker = relationship("User")
 
     __table_args__ = (
-
-        UniqueConstraint(
-            "daily_class_id",
-            "student_class_id",
-            name="uq_daily_student"
-        ),
-
-        Index(
-            "idx_daily_student",
-            "student_class_id",
-            "attendance_status"
-        ),
-
+        UniqueConstraint("daily_class_id", "student_class_id", name="uq_daily_student"),
+        Index("idx_daily_student", "student_class_id", "attendance_status"),
     )
 
 
@@ -273,54 +170,27 @@ class DailyClassStudent(Base, TimestampMixin):
 # STUDENTATTENDANCE TABLE
 # ============================================================
 
-class StudentAttendance(Base, TimestampMixin):
 
+class StudentAttendance(Base, TimestampMixin):
     __tablename__ = "student_attendance"
 
-    id = Column(
-        Integer,
-        primary_key=True
-    )
+    attendance_code = Column(String(30), primary_key=True, default=generate_uuid)
 
     student_class_id = Column(
-        Integer,
-        ForeignKey("student_classes.id"),
+        String(30),
+        ForeignKey("student_classes.student_class_code"),
         nullable=False,
-        unique=True
+        unique=True,
     )
 
-    total_classes = Column(
-        Integer,
-        default=0
-    )
+    total_classes = Column(Integer, default=0)
 
-    present_classes = Column(
-        Integer,
-        default=0
-    )
+    present_classes = Column(Integer, default=0)
 
-    absent_classes = Column(
-        Integer,
-        default=0
-    )
+    absent_classes = Column(Integer, default=0)
 
-    attendance_percentage = Column(
-        Float,
-        default=0
-    )
+    attendance_percentage = Column(Float, default=0)
 
+    student_class = relationship("StudentClass")
 
-    student_class = relationship(
-        "StudentClass"
-    )
-
-    __table_args__ = (
-
-        Index(
-            "idx_student_attendance",
-            "student_class_id"
-        ),
-
-    )
-
-
+    __table_args__ = (Index("idx_student_attendance", "student_class_id"),)

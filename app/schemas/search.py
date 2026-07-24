@@ -1,61 +1,104 @@
-# ============================================================
-# app/schemas/search.py
-# ============================================================
-#
-# Response formatting layer: the shape every search endpoint returns.
-# Kept intentionally consistent between Student and Teacher search so
-# frontend code can treat them the same way. `internal_id` is always
-# present but explicitly documented as internal - the business ID
-# (student_id/teacher_id), never the numeric primary key.
+from datetime import date
 
-from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
-class StudentSearchResultItem(BaseModel):
-    display_name: str = Field(..., description="Student's full name, for display only")
-    email: Optional[str] = None
-    student_code: str = Field(..., description="Human-facing code (admission number)")
-    internal_id: str = Field(..., description="Internal identifier (student_id) - use this in follow-up API calls")
+class StudentSearchDetail(BaseModel):
+    student_id: str = Field(
+        ...,
+        description="Unique student identifier - use this in follow-up API calls",
+    )
+    admission_number: str | None = None
+    registration_number: str | None = None
+    student_name: str
+    gender: str | None = None
+    date_of_birth: date | None = None
+    blood_group: str | None = None
+    profile_photo: str | None = None
+    address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    pincode: str | None = None
+    parent_name: str | None = None
+    parent_phone: str | None = None
+    guardian_name: str | None = None
+    guardian_phone: str | None = None
+    emergency_contact: str | None = None
+    admission_date: date | None = None
+    school_name: str | None = None
+    medium: str | None = None
+    board: str | None = None
+    remarks: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    user_id: str | None = None
+    is_active: bool | None = None
 
-    registration_number: Optional[str] = None
-    phone: Optional[str] = None
-    profile_photo: Optional[str] = None
+    class_id: str | None = None
+    class_name: str | None = None
+    section: str | None = None
+    display_name: str | None = None
+    roll_number: int | None = None
 
     score: float = Field(..., description="Blended confidence, 0-100")
     confidence_label: str = Field(..., description='"high" | "medium" | "low"')
     match_type: str = Field(..., description='"exact" | "fuzzy"')
     matched_field: str
-    signals: List[str] = Field(default_factory=list, description='e.g. ["exact:email", "fuzzy:student_name"]')
+    signals: list[str] = Field(
+        default_factory=list,
+        description='e.g. ["exact:email", "fuzzy:student_name"]',
+    )
+
+
+class TeacherSearchDetail(BaseModel):
+    teacher_id: str = Field(
+        ...,
+        description="Unique teacher identifier - use this in follow-up API calls",
+    )
+    employee_code: str | None = None
+    teacher_name: str
+    gender: str | None = None
+    date_of_birth: date | None = None
+    qualification: str | None = None
+    experience_years: float | None = None
+    specialization: str | None = None
+    profile_photo: str | None = None
+    joining_date: date | None = None
+    designation: str | None = None
+    department: str | None = None
+    address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    pincode: str | None = None
+    emergency_contact: str | None = None
+    remarks: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    user_id: str | None = None
+    is_active: bool | None = None
+
+    subjects: list[str] = Field(
+        default_factory=list,
+        description="Subject names taught by the teacher",
+    )
+    class_teacher_of: str | None = None
+
+    score: float
+    confidence_label: str
+    match_type: str
+    matched_field: str
+    signals: list[str] = Field(default_factory=list)
 
 
 class StudentSearchResponse(BaseModel):
     query: str
     query_type: str = Field(..., description='"email" | "name_or_code", auto-detected')
     result_count: int
-    results: List[StudentSearchResultItem]
-
-
-class TeacherSearchResultItem(BaseModel):
-    display_name: str
-    email: Optional[str] = None
-    teacher_code: str = Field(..., description="Human-facing code (employee code)")
-    internal_id: str = Field(..., description="Internal identifier (teacher_id) - use this in follow-up API calls")
-
-    department: Optional[str] = None
-    designation: Optional[str] = None
-    phone: Optional[str] = None
-    profile_photo: Optional[str] = None
-
-    score: float
-    confidence_label: str
-    match_type: str
-    matched_field: str
-    signals: List[str] = Field(default_factory=list)
+    results: list[StudentSearchDetail]
 
 
 class TeacherSearchResponse(BaseModel):
     query: str
     query_type: str
     result_count: int
-    results: List[TeacherSearchResultItem]
+    results: list[TeacherSearchDetail]

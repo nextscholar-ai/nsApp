@@ -1,24 +1,22 @@
-from typing import Optional, List
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-
 from app.model import (
     AcademicSession,
-    StudentProfile,
-    StudentClass,
-    TeacherProfile,
-    TeacherSubject,
-    ClassTimeTable,
-    WeekDay,
-    TimeSlot,
     ClassRoom,
     ClassSubject,
+    ClassTimeTable,
+    StudentClass,
+    StudentProfile,
+    TeacherProfile,
+    TeacherSubject,
+    TimeSlot,
+    WeekDay,
 )
 
 
 class TimetableService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     # -------------------------
@@ -27,12 +25,12 @@ class TimetableService:
     def admin_get_timetables(
         self,
         *,
-        classroom_id: Optional[int] = None,
-        teacher_subject_id: Optional[int] = None,
-        class_subject_id: Optional[int] = None,
-        week_day_id: Optional[int] = None,
-    ) -> List[ClassTimeTable]:
-        q = self.db.query(ClassTimeTable).filter(ClassTimeTable.is_active == True)
+        classroom_id: str | None = None,
+        teacher_subject_id: int | None = None,
+        class_subject_id: int | None = None,
+        week_day_id: str | None = None,
+    ) -> list[ClassTimeTable]:
+        q = self.db.query(ClassTimeTable).filter(ClassTimeTable.is_active)
 
         if classroom_id is not None:
             q = q.filter(ClassTimeTable.classroom_id == classroom_id)
@@ -52,7 +50,11 @@ class TimetableService:
         )
         return q.all()
 
-    def admin_update_timetable(self, timetable_id: int, update_fields: dict) -> Optional[ClassTimeTable]:
+    def admin_update_timetable(
+        self,
+        timetable_id: int,
+        update_fields: dict,
+    ) -> ClassTimeTable | None:
         entry = (
             self.db.query(ClassTimeTable)
             .filter(ClassTimeTable.id == timetable_id)
@@ -101,13 +103,18 @@ class TimetableService:
     # -------------------------
     # Student
     # -------------------------
-    def _get_current_academic_session_id(self) -> int:
-        session = self.db.query(AcademicSession).filter(AcademicSession.is_current == True).first()
+    def _get_current_academic_session_id(self) -> str:
+        session = (
+            self.db.query(AcademicSession).filter(AcademicSession.is_current).first()
+        )
         if not session:
-            raise HTTPException(status_code=404, detail="Current academic session not found")
-        return session.id
+            raise HTTPException(
+                status_code=404,
+                detail="Current academic session not found",
+            )
+        return session.session_code
 
-    def student_get_timetable(self, *, student_user_id: int) -> List[dict]:
+    def student_get_timetable(self, *, student_user_id: int) -> list[dict]:
         current_session_id = self._get_current_academic_session_id()
 
         student = (
@@ -144,13 +151,19 @@ class TimetableService:
                 ClassTimeTable.id.label("timetable_id"),
             )
             .select_from(ClassTimeTable)
-            .join(WeekDay, WeekDay.id == ClassTimeTable.week_day_id)
-            .join(TimeSlot, TimeSlot.id == ClassTimeTable.time_slot_id)
+            .join(WeekDay, WeekDay.day_code == ClassTimeTable.week_day_id)
+            .join(TimeSlot, TimeSlot.slot_code == ClassTimeTable.time_slot_id)
             .join(ClassSubject, ClassSubject.id == ClassTimeTable.class_subject_id)
-            .join(TeacherSubject, TeacherSubject.id == ClassTimeTable.teacher_subject_id)
-            .join(TeacherProfile, TeacherProfile.teacher_id == TeacherSubject.teacher_id)
+            .join(
+                TeacherSubject,
+                TeacherSubject.id == ClassTimeTable.teacher_subject_id,
+            )
+            .join(
+                TeacherProfile,
+                TeacherProfile.teacher_id == TeacherSubject.teacher_id,
+            )
             .filter(
-                ClassTimeTable.is_active == True,
+                ClassTimeTable.is_active,
                 ClassTimeTable.academic_sessions_id == current_session_id,
                 ClassTimeTable.classroom_id.in_(classroom_ids),
             )
@@ -176,7 +189,7 @@ class TimetableService:
     # -------------------------
     # Teacher
     # -------------------------
-    def teacher_get_timetable(self, *, teacher_user_id: int) -> List[dict]:
+    def teacher_get_timetable(self, *, teacher_user_id: int) -> list[dict]:
         current_session_id = self._get_current_academic_session_id()
 
         teacher = (
@@ -192,7 +205,7 @@ class TimetableService:
             .filter(
                 TeacherSubject.teacher_id == teacher.teacher_id,
                 TeacherSubject.academic_sessions_id == current_session_id,
-                TeacherSubject.is_active == True,
+                TeacherSubject.is_active,
             )
             .all()
         )
@@ -210,12 +223,12 @@ class TimetableService:
                 TimeSlot.end_time.label("end_time"),
             )
             .select_from(ClassTimeTable)
-            .join(ClassRoom, ClassRoom.id == ClassTimeTable.classroom_id)
+            .join(ClassRoom, ClassRoom.class_code == ClassTimeTable.classroom_id)
             .join(ClassSubject, ClassSubject.id == ClassTimeTable.class_subject_id)
-            .join(WeekDay, WeekDay.id == ClassTimeTable.week_day_id)
-            .join(TimeSlot, TimeSlot.id == ClassTimeTable.time_slot_id)
+            .join(WeekDay, WeekDay.day_code == ClassTimeTable.week_day_id)
+            .join(TimeSlot, TimeSlot.slot_code == ClassTimeTable.time_slot_id)
             .filter(
-                ClassTimeTable.is_active == True,
+                ClassTimeTable.is_active,
                 ClassTimeTable.academic_sessions_id == current_session_id,
                 ClassTimeTable.teacher_subject_id.in_(allowed_teacher_subject_ids),
             )
@@ -230,11 +243,9 @@ class TimetableService:
         return [
             {
                 "class": r.class_,
-
                 "subject": r.subject,
                 "day": r.day,
                 "time": f"{r.start_time} - {r.end_time}",
             }
             for r in rows
         ]
-

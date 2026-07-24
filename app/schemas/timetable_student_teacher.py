@@ -1,5 +1,5 @@
 from datetime import time
-from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -26,4 +26,3 @@ class TeacherTimetableItemResponse(BaseModel):
         if "class_" in data:
             data["class"] = data.pop("class_")
         return data
-

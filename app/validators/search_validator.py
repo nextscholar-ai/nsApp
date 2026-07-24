@@ -41,10 +41,12 @@ class SearchQueryValidator:
     @staticmethod
     def validate(raw_query: str) -> ValidatedQuery:
         if raw_query is None:
-            raise SearchValidationError("Search query is required.")
+            msg = "Search query is required."
+            raise SearchValidationError(msg)
 
         if not isinstance(raw_query, str):
-            raise SearchValidationError("Search query must be text.")
+            msg = "Search query must be text."
+            raise SearchValidationError(msg)
 
         # Strip non-printable / control characters (keep normal spaces),
         # then collapse whitespace. Handles pasted garbage, zero-width
@@ -57,11 +59,13 @@ class SearchQueryValidator:
         cleaned = " ".join(cleaned.split())
 
         if len(cleaned) < MIN_QUERY_LENGTH:
-            raise SearchValidationError("Search query cannot be empty.")
+            msg = "Search query cannot be empty."
+            raise SearchValidationError(msg)
 
         if len(cleaned) > MAX_QUERY_LENGTH:
+            msg = f"Search query is too long (max {MAX_QUERY_LENGTH} characters)."
             raise SearchValidationError(
-                f"Search query is too long (max {MAX_QUERY_LENGTH} characters)."
+                msg,
             )
 
         query_type = classify_query(cleaned)

@@ -1,27 +1,6 @@
-from .common import (
-    BaseSchema,
-    TimestampSchema,
-    ActiveSchema,
-    AuditSchema,
-    UserMinResponse,
-    StudentProfileMinResponse,
-    TeacherProfileMinResponse,
-    ClassRoomMinResponse,
-    SubjectMinResponse,
-    AcademicSessionMinResponse,
-    ResponseSchema,
-    PaginatedResponseSchema,
-    LoginRequest,
-    LoginResponse,
-    RefreshTokenRequest,
-    RefreshTokenResponse,
-    LogoutRequest,
-    ChangePasswordRequest,
-    ForgotPasswordRequest,
-    ResetPasswordRequest,
-    VerifyEmailRequest,
-    ResendOTPRequest,
-)
+# ruff: noqa: F401
+
+from app.core.enums import UserRole
 
 from .academic_session import (
     AcademicSessionBase,
@@ -29,94 +8,12 @@ from .academic_session import (
     AcademicSessionResponse,
     AcademicSessionUpdate,
 )
-
-from .user import (
-    UserBase,
-    UserCreate,
-    UserUpdate,
-    UserResponse,
-    StudentProfileBase,
-    StudentProfileCreate,
-    StudentProfileUpdate,
-    StudentProfileResponse,
-    TeacherProfileBase,
-    TeacherProfileCreate,
-    TeacherProfileUpdate,
-    TeacherProfileResponse,
-    AdminProfileBase,
-    AdminProfileCreate,
-    AdminProfileUpdate,
-    AdminProfileResponse,
-)
-
-from .classes_subjects import (
-    ClassRoomBase,
-    ClassRoomCreate,
-    ClassRoomUpdate,
-    ClassRoomResponse,
-    SubjectBase,
-    SubjectCreate,
-    SubjectUpdate,
-    SubjectResponse,
-    ClassSubjectBase,
-    ClassSubjectCreate,
-    ClassSubjectResponse,
-)
-
-from .teacher_student_links import (
-    TeacherSubjectBase,
-    TeacherSubjectCreate,
-    TeacherSubjectResponse,
-    StudentClassBase,
-    StudentClassCreate,
-    StudentClassResponse,
-    StudentPromotionHistoryBase,
-    StudentPromotionHistoryCreate,
-    StudentPromotionHistoryResponse,
-)
-
-from .timetable import (
-    WeekDayBase,
-    WeekDayResponse,
-    TimeSlotBase,
-    TimeSlotResponse,
-    ClassTimeTableBase,
-    ClassTimeTableCreate,
-    ClassTimeTableResponse,
-    TeacherAvailabilityBase,
-    TeacherAvailabilityCreate,
-    TeacherAvailabilityResponse,
-    WeekDayCreate,
-    TimeSlotCreate,
-    ClassTimeTableUpdate,
-    TeacherAvailabilityUpdate,
-)
-
-from .timetable_student_teacher import (
-    StudentTimetableItemResponse,
-    TeacherTimetableItemResponse,
-)
-
-from .daily_class import (
-    DailyClassBase,
-    DailyClassCreate,
-    DailyClassResponse,
-    DailyClassStudentBase,
-    DailyClassStudentCreate,
-    DailyClassStudentResponse,
-    StudentAttendanceBase,
-    StudentAttendanceResponse,
-    DailyClassUpdate,
-    DailyClassStudentUpdate,
-)
-
 from .admin_student_teacher import (
-    TeacherAdminListResponse,
-    StudentAdminListResponse,
-    PaginatedTeacherAdminListResponse,
     PaginatedStudentAdminListResponse,
+    PaginatedTeacherAdminListResponse,
+    StudentAdminListResponse,
+    TeacherAdminListResponse,
 )
-
 from .assignment import (
     AssignmentBase,
     AssignmentCreate,
@@ -124,17 +21,69 @@ from .assignment import (
     AssignmentResultBase,
     AssignmentResultCreate,
     AssignmentResultResponse,
-    AssignmentUpdate,
     AssignmentResultUpdate,
+    AssignmentUpdate,
 )
-
-from .study_material import (
-    StudyMaterialBase,
-    StudyMaterialCreate,
-    StudyMaterialResponse,
-    StudyMaterialUpdate,
+from .chat import (
+    ChatConversationResponse,
+    ChatMessageBase,
+    ChatMessageCreate,
+    ChatMessageResponse,
+    ChatRoomBase,
+    ChatRoomCreate,
+    ChatRoomResponse,
+    ChatRoomUpdate,
+    ChatUnreadCountResponse,
 )
-
+from .classes_subjects import (
+    ClassRoomBase,
+    ClassRoomCreate,
+    ClassRoomResponse,
+    ClassRoomUpdate,
+    ClassSubjectBase,
+    ClassSubjectCreate,
+    ClassSubjectResponse,
+    SubjectBase,
+    SubjectCreate,
+    SubjectResponse,
+    SubjectUpdate,
+)
+from .common import (
+    AcademicSessionMinResponse,
+    ActiveSchema,
+    AuditSchema,
+    BaseSchema,
+    ChangePasswordRequest,
+    ClassRoomMinResponse,
+    ForgotPasswordRequest,
+    LoginRequest,
+    LoginResponse,
+    LogoutRequest,
+    PaginatedResponseSchema,
+    RefreshTokenRequest,
+    RefreshTokenResponse,
+    ResendOTPRequest,
+    ResetPasswordRequest,
+    ResponseSchema,
+    StudentProfileMinResponse,
+    SubjectMinResponse,
+    TeacherProfileMinResponse,
+    TimestampSchema,
+    UserMinResponse,
+    VerifyEmailRequest,
+)
+from .daily_class import (
+    DailyClassBase,
+    DailyClassCreate,
+    DailyClassResponse,
+    DailyClassStudentBase,
+    DailyClassStudentCreate,
+    DailyClassStudentResponse,
+    DailyClassStudentUpdate,
+    DailyClassUpdate,
+    StudentAttendanceBase,
+    StudentAttendanceResponse,
+)
 from .exam import (
     ExamBase,
     ExamCreate,
@@ -142,50 +91,133 @@ from .exam import (
     ExamResultBase,
     ExamResultCreate,
     ExamResultResponse,
-    ExamUpdate,
     ExamResultUpdate,
+    ExamUpdate,
 )
-
 from .fee import (
     FeeBase,
     FeeCreate,
-    FeeResponse,
-    FeeUpdate,
     FeePaymentCreate,
     FeePaymentResponse,
+    FeeResponse,
     FeeSummaryResponse,
+    FeeUpdate,
 )
-
+from .ka import (
+    KaCourseCreate,
+    KaCourseResponse,
+    KaStudentCreate,
+    KaStudentResponse,
+    StudentReportCreate,
+    StudentReportResponse,
+)
 from .notice import (
     NoticeBase,
     NoticeCreate,
+    NoticeFilterRequest,
     NoticeResponse,
     NoticeUpdate,
-    NoticeFilterRequest,
 )
-
-from .chat import (
-    ChatRoomBase,
-    ChatRoomCreate,
-    ChatRoomResponse,
-    ChatMessageBase,
-    ChatMessageCreate,
-    ChatMessageResponse,
-    ChatRoomUpdate,
-    ChatConversationResponse,
-    ChatUnreadCountResponse,
+from .promotion import (
+    StudentPromotionHistoryCreate,
+    StudentPromotionHistoryResponse,
+    StudentPromotionHistoryUpdate,
 )
-
+from .search import (
+    StudentSearchDetail,
+    StudentSearchResponse,
+    TeacherSearchDetail,
+    TeacherSearchResponse,
+)
 from .student_id_card import (
+    PaginatedStudentIDCardListResponse,
+    StudentIDCardDownloadResponse,
     StudentIDCardGenerateResponse,
     StudentIDCardResponse,
-    StudentIDCardDownloadResponse,
-    PaginatedStudentIDCardListResponse,
 )
-
-from .search import (
-    StudentSearchResultItem,
-    StudentSearchResponse,
+from .study_material import (
+    StudyMaterialBase,
+    StudyMaterialCreate,
+    StudyMaterialResponse,
+    StudyMaterialUpdate,
+)
+from .teacher_student_links import (
+    StudentClassBase,
+    StudentClassCreate,
+    StudentClassResponse,
+    StudentPromotionHistoryBase,
+    TeacherSubjectBase,
+    TeacherSubjectCreate,
+    TeacherSubjectResponse,
+)
+from .timetable import (
+    ClassTimeTableBase,
+    ClassTimeTableCreate,
+    ClassTimeTableResponse,
+    ClassTimeTableUpdate,
+    TeacherAvailabilityBase,
+    TeacherAvailabilityCreate,
+    TeacherAvailabilityResponse,
+    TeacherAvailabilityUpdate,
+    TimeSlotBase,
+    TimeSlotCreate,
+    TimeSlotResponse,
+    WeekDayBase,
+    WeekDayCreate,
+    WeekDayResponse,
+)
+from .timetable_student_teacher import (
+    StudentTimetableItemResponse,
+    TeacherTimetableItemResponse,
+)
+from .topic import (
+    StudentTopicProgressReportCreate,
+    StudentTopicProgressReportResponse,
+    TopicCreate,
+    TopicProgressCreate,
+    TopicProgressResponse,
+    TopicResponse,
+)
+from .user import (
+    AdminProfileBase,
+    AdminProfileCreate,
+    AdminProfileResponse,
+    AdminProfileUpdate,
+    StudentProfileBase,
+    StudentProfileCreate,
+    StudentProfileResponse,
+    StudentProfileUpdate,
+    TeacherProfileBase,
+    TeacherProfileCreate,
+    TeacherProfileResponse,
+    TeacherProfileUpdate,
+    UserBase,
+    UserCreate,
+    UserResponse,
+    UserUpdate,
+)
+from .zoom import (
+    ZoomDurationReportCreate,
+    ZoomDurationReportResponse,
+    ZoomDurationReportUpdate,
+    ZoomFileCreate,
+    ZoomFileResponse,
+    ZoomFileUpdate,
+    ZoomInteractionReportCreate,
+    ZoomInteractionReportResponse,
+    ZoomInteractionReportUpdate,
+    ZoomMeetingCreate,
+    ZoomMeetingResponse,
+    ZoomMeetingUpdate,
+    ZoomRecordingFileCreate,
+    ZoomRecordingFileResponse,
+    ZoomRecordingFileUpdate,
+    ZoomStudentInteractionCreate,
+    ZoomStudentInteractionResponse,
+    ZoomStudentInteractionUpdate,
+    ZoomTranscriptCreate,
+    ZoomTranscriptResponse,
+    ZoomTranscriptUpdate,
 )
 
 # ============================================================
@@ -193,4 +225,8 @@ from .search import (
 # now that all schema classes are imported into this namespace.
 # ============================================================
 LoginResponse.model_rebuild()
-
+UserResponse.model_rebuild()
+StudentProfileResponse.model_rebuild()
+TeacherProfileResponse.model_rebuild()
+AdminProfileResponse.model_rebuild()
+AssignmentResponse.model_rebuild()

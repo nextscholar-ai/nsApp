@@ -25,7 +25,6 @@
 # (difflib, Levenshtein, cosine-similarity-on-embeddings, ...). No other
 # module in the codebase imports rapidfuzz directly.
 
-from typing import List, Tuple
 
 from rapidfuzz import fuzz, process
 
@@ -51,11 +50,11 @@ FUZZY_CANDIDATE_POOL = 200
 
 def rank_candidates(
     query: str,
-    candidates: List[Tuple[str, str]],
+    candidates: list[tuple[str, str]],
     *,
     limit: int = FUZZY_CANDIDATE_POOL,
     score_cutoff: float = FUZZY_MIN_SCORE,
-) -> List[Tuple[str, float]]:
+) -> list[tuple[str, float]]:
     """candidates: list of (entity_key, text_to_match_against).
     Returns list of (entity_key, score 0-100), best first.
 

@@ -1,50 +1,51 @@
 # app/core/exceptions.py
 
-class SchoolERPException(Exception):
-    """Base exception for School ERP"""
-    pass
+
+class SchoolERPException(Exception):  # noqa: N818
+    """Base exception for School ERP."""
+
 
 class ValidationError(SchoolERPException):
-    """Raised when validation fails"""
-    pass
+    """Raised when validation fails."""
+
 
 class NotFoundError(SchoolERPException):
-    """Raised when resource not found"""
-    pass
+    """Raised when resource not found."""
+
 
 class DuplicateError(SchoolERPException):
-    """Raised when duplicate entry found"""
-    pass
+    """Raised when duplicate entry found."""
+
 
 class CapacityExceededError(SchoolERPException):
-    """Raised when class capacity exceeded"""
-    pass
+    """Raised when class capacity exceeded."""
+
 
 class StudentNotEnrolledError(SchoolERPException):
-    """Raised when student not enrolled in class"""
-    pass
+    """Raised when student not enrolled in class."""
+
 
 class TeacherNotAssignedError(SchoolERPException):
-    """Raised when teacher not assigned to class/subject"""
-    pass
+    """Raised when teacher not assigned to class/subject."""
+
 
 class AuthenticationError(SchoolERPException):
-    """Raised when authentication fails"""
-    pass
+    """Raised when authentication fails."""
+
 
 class AuthorizationError(SchoolERPException):
-    """Raised when user lacks permission"""
-    pass
+    """Raised when user lacks permission."""
+
 
 class InvalidOperationError(SchoolERPException):
-    """Raised when operation is invalid"""
-    pass
+    """Raised when operation is invalid."""
+
 
 class SearchValidationError(ValidationError):
     """Raised when a search query fails input validation (empty, too
     long, control characters, etc). Routers translate this into a 400
-    response - see app/routers/student_search_router.py."""
-    pass
+    response - see app/routers/student_search_router.py.
+    """
 
 
 class AmbiguousIdentifierError(SchoolERPException):
@@ -57,12 +58,12 @@ class AmbiguousIdentifierError(SchoolERPException):
     existing search endpoints already use.
     """
 
-    def __init__(self, message: str, candidates: list):
+    def __init__(self, message: str, candidates: list) -> None:
         super().__init__(message)
         self.candidates = candidates
 
 
 class IdentifierNotFoundError(NotFoundError):
     """Raised by IdentifierResolverService when nothing matches the
-    id / email / name typed by the user."""
-    pass
+    id / email / name typed by the user.
+    """

@@ -1,33 +1,35 @@
-import os
 from datetime import date, timedelta
-from typing import List, Optional, Tuple
+from pathlib import Path
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.enums import UserRole
 from app.model import (
+    AcademicSession,
+    ClassRoom,
+    StudentClass,
     StudentIDCard,
     StudentProfile,
-    StudentClass,
-    ClassRoom,
-    AcademicSession,
 )
-from app.core.enums import UserRole
-
-from app.services.utils.id_card_qr_generator import generate_qr_image
 from app.services.utils.id_card_pdf_generator import render_student_id_pdf
+from app.services.utils.id_card_qr_generator import generate_qr_image
 from app.services.utils.institute_assets import load_institute_asset
 
 
 class StudentIDCardService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
-    def _paginate(self, page: int, page_size: int) -> Tuple[int, int, int]:
+    def _paginate(self, page: int, page_size: int) -> tuple[int, int, int]:
         offset = (page - 1) * page_size
         return offset, page_size, page
 
-    def _get_current_student(self, current_user, student_profile: Optional[StudentProfile] = None):
+    def _get_current_student(
+        self,
+        current_user,
+        student_profile: StudentProfile | None = None,
+    ):
         # current_user.role is already enforced by router dependencies
         if student_profile is not None:
             return student_profile
@@ -39,15 +41,19 @@ class StudentIDCardService:
 
     def _get_academic_session_for_card(self) -> AcademicSession:
         session = (
-            self.db.query(AcademicSession)
-            .filter(AcademicSession.is_current == True)
-            .first()
+            self.db.query(AcademicSession).filter(AcademicSession.is_current).first()
         )
         if not session:
-            raise HTTPException(status_code=404, detail="Current academic session not found")
+            raise HTTPException(
+                status_code=404,
+                detail="Current academic session not found",
+            )
         return session
 
-    def _compute_doj_and_valid_till(self, student_class: StudentClass) -> Tuple[Optional[date], Optional[date]]:
+    def _compute_doj_and_valid_till(
+        self,
+        student_class: StudentClass,
+    ) -> tuple[date | None, date | None]:
         doj = student_class.admission_date
         # Fixed policy: valid for 1 year from DOJ
         valid_till = None
@@ -58,10 +64,18 @@ class StudentIDCardService:
     @staticmethod
     def _profile_is_complete(student: StudentProfile) -> bool:
         """Minimal data required to render a card: name, DOB and parent name."""
-        return bool(student.student_name and student.date_of_birth and student.parent_name)
+        return bool(
+            student.student_name and student.date_of_birth and student.parent_name,
+        )
 
-    def generate_or_regenerate_card(self, *, student_id: str, admin_user, regenerate: bool) -> StudentIDCard:
-        if admin_user.role != UserRole.ADMIN.value and admin_user.role != UserRole.ADMIN:
+    def generate_or_regenerate_card(
+        self,
+        *,
+        student_id: str,
+        admin_user,
+        regenerate: bool,
+    ) -> StudentIDCard:
+        if admin_user.role not in (UserRole.ADMIN.value, UserRole.ADMIN):
             # safety
             raise HTTPException(status_code=403, detail="Admin only")
 
@@ -72,7 +86,11 @@ class StudentIDCardService:
         )
 
     def _generate_or_regenerate_card_internal(
-        self, *, student_id: str, actor_user_id: Optional[int], regenerate: bool
+        self,
+        *,
+        student_id: str,
+        actor_user_id: int | None,
+        regenerate: bool,
     ) -> StudentIDCard:
         """Core generation logic shared by the admin-triggered endpoint and the
         automated backfill routine. Raises HTTPException on failure so callers
@@ -94,15 +112,22 @@ class StudentIDCardService:
             self.db.query(StudentClass)
             .filter(
                 StudentClass.student_id == student.student_id,
-                StudentClass.academic_sessions_id == current_session.id,
+                StudentClass.academic_sessions_id == current_session.session_code,
                 StudentClass.status == "ACTIVE",
             )
             .first()
         )
         if not student_class:
-            raise HTTPException(status_code=404, detail="Student not enrolled in current academic session")
+            raise HTTPException(
+                status_code=404,
+                detail="Student not enrolled in current academic session",
+            )
 
-        classroom = self.db.query(ClassRoom).filter(ClassRoom.id == student_class.classroom_id).first()
+        classroom = (
+            self.db.query(ClassRoom)
+            .filter(ClassRoom.class_code == student_class.classroom_id)
+            .first()
+        )
 
         # Ensure assets
         institute_logo_path, institute_name, institute_contact = load_institute_asset()
@@ -111,7 +136,7 @@ class StudentIDCardService:
             self.db.query(StudentIDCard)
             .filter(
                 StudentIDCard.student_id == student.student_id,
-                StudentIDCard.academic_sessions_id == current_session.id,
+                StudentIDCard.academic_sessions_id == current_session.session_code,
             )
             .first()
         )
@@ -120,18 +145,18 @@ class StudentIDCardService:
             return existing
 
         # storage
-        base_dir = os.path.join(
-            "uploads",
-            "student_id_cards",
-            str(current_session.id),
-            str(student.student_id),
+        base_dir = (
+            Path("uploads")
+            / "student_id_cards"
+            / str(current_session.session_code)
+            / str(student.student_id)
         )
-        os.makedirs(base_dir, exist_ok=True)
+        base_dir.mkdir(parents=True, exist_ok=True)
 
-        qr_path = os.path.join(base_dir, "qr.png")
-        pdf_path = os.path.join(base_dir, "student_id_card.pdf")
+        qr_path = str(base_dir / "qr.png")
+        pdf_path = str(base_dir / "student_id_card.pdf")
 
-        qr_payload = f"SCHOOL_ERP|student_id={student.student_id}|session_id={current_session.id}|card_type=STUDENT_ID"
+        qr_payload = f"SCHOOL_ERP|student_id={student.student_id}|session_id={current_session.session_code}|card_type=STUDENT_ID"
         generate_qr_image(qr_payload, qr_path)
 
         doj, valid_till = self._compute_doj_and_valid_till(student_class)
@@ -174,7 +199,7 @@ class StudentIDCardService:
 
         card = StudentIDCard(
             student_id=student.student_id,
-            academic_sessions_id=current_session.id,
+            academic_sessions_id=current_session.session_code,
             student_name=student.student_name,
             parent_name=student.parent_name,
             class_display_name=classroom.display_name if classroom else None,
@@ -197,7 +222,7 @@ class StudentIDCardService:
         self.db.refresh(card)
         return card
 
-    def backfill_missing_id_cards(self, *, actor_user_id: Optional[int] = None) -> dict:
+    def backfill_missing_id_cards(self, *, actor_user_id: int | None = None) -> dict:
         """Iterate over every ACTIVE enrollment in the current academic session
         and generate an ID card for any student that doesn't already have one.
 
@@ -214,7 +239,7 @@ class StudentIDCardService:
         enrollments = (
             self.db.query(StudentClass)
             .filter(
-                StudentClass.academic_sessions_id == current_session.id,
+                StudentClass.academic_sessions_id == current_session.session_code,
                 StudentClass.status == "ACTIVE",
             )
             .all()
@@ -227,7 +252,7 @@ class StudentIDCardService:
                 self.db.query(StudentIDCard)
                 .filter(
                     StudentIDCard.student_id == enrollment.student_id,
-                    StudentIDCard.academic_sessions_id == current_session.id,
+                    StudentIDCard.academic_sessions_id == current_session.session_code,
                 )
                 .first()
             )
@@ -270,9 +295,14 @@ class StudentIDCardService:
             raise HTTPException(status_code=404, detail="Student profile not found")
 
         # Admin/Teacher can view any; Student can view own only
-        if current_user.role == UserRole.STUDENT.value:
-            if student_profile.student_id != student_id:
-                raise HTTPException(status_code=403, detail="You can only view your own card")
+        if (
+            current_user.role == UserRole.STUDENT.value
+            and student_profile.student_id != student_id
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="You can only view your own card",
+            )
 
         card = (
             self.db.query(StudentIDCard)
@@ -284,11 +314,21 @@ class StudentIDCardService:
             raise HTTPException(status_code=404, detail="Student ID card not found")
         return card
 
-    def list_all_cards(self, *, page: int, page_size: int) -> Tuple[List[StudentIDCard], int]:
+    def list_all_cards(
+        self,
+        *,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[StudentIDCard], int]:
         q = self.db.query(StudentIDCard)
         total = q.count()
         offset = (page - 1) * page_size
-        items = q.order_by(StudentIDCard.created_at.desc()).offset(offset).limit(page_size).all()
+        items = (
+            q.order_by(StudentIDCard.created_at.desc())
+            .offset(offset)
+            .limit(page_size)
+            .all()
+        )
         return items, total
 
     def _get_student_user_profile(self, *, student_id: str):
@@ -301,5 +341,3 @@ class StudentIDCardService:
     def get_card_for_download(self, *, student_id: str, current_user) -> StudentIDCard:
         # Same rules as view
         return self.get_card_for_view(student_id=student_id, current_user=current_user)
-
-

@@ -2,12 +2,11 @@
 # routers/study_material_routers.py - Study Material Routes (File-based)
 # ============================================================
 
-from __future__ import annotations
+import contextlib
+from pathlib import Path
+from typing import Annotated
 
-from typing import List, Optional
-import os
-
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -15,27 +14,25 @@ from app.api.database import get_db
 from app.core.enums import UserRole
 from app.dependencies import get_current_user, require_role
 from app.model import User
-from app.services.study_material_service import StudyMaterialService
-
-# Import schemas directly to avoid pulling in the whole schemas package
-from app.schemas.study_material import StudyMaterialResponse
 from app.schemas.common import ResponseSchema
+from app.schemas.study_material import StudyMaterialResponse
+from app.services.study_material_service import StudyMaterialService
 
 router = APIRouter(prefix="/study-materials", tags=["Study Materials"])
 
 
 @router.post("", response_model=StudyMaterialResponse)
 async def create_study_material(
-    title: str,
-    description: Optional[str] = None,
-    material_type: Optional[str] = None,
-    academic_sessions_id: int = ...,
-    classroom_id: int = ...,
-    class_subject_id: int = ...,
-    teacher_subject_id: int = ...,
-    file: UploadFile = File(...),
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
-    db: Session = Depends(get_db),
+    title: Annotated[str, Form()],
+    description: Annotated[str | None, Form()] = None,
+    material_type: Annotated[str | None, Form()] = None,
+    academic_sessions_id: Annotated[str, Form()] = ...,
+    classroom_id: Annotated[str, Form()] = ...,
+    class_subject_id: Annotated[str, Form()] = ...,
+    teacher_subject_id: Annotated[str, Form()] = ...,
+    file: Annotated[UploadFile, File()] = ...,
+    current_user: Annotated[User, Depends(require_role(UserRole.ADMIN))] = ...,
+    db: Annotated[Session, Depends(get_db)] = ...,
 ):
     """Admin uploads actual study material files."""
     try:
@@ -53,15 +50,20 @@ async def create_study_material(
         )
         return StudyMaterialResponse.model_validate(material)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        ) from e
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        ) from e
 
 
-@router.get("", response_model=List[StudyMaterialResponse])
+@router.get("", response_model=list[StudyMaterialResponse])
 async def list_study_materials(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
     """Get study materials."""
     service = StudyMaterialService(db)
@@ -69,11 +71,14 @@ async def list_study_materials(
     return [StudyMaterialResponse.model_validate(m) for m in materials]
 
 
-@router.get("/class-subject/{class_subject_id}", response_model=List[StudyMaterialResponse])
+@router.get(
+    "/class-subject/{class_subject_id}",
+    response_model=list[StudyMaterialResponse],
+)
 async def get_materials_for_class_subject(
-    class_subject_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    class_subject_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
     """Get study materials for a specific class-subject mapping."""
     service = StudyMaterialService(db)
@@ -83,18 +88,21 @@ async def get_materials_for_class_subject(
 
 @router.get("/{id}", response_model=StudyMaterialResponse)
 async def get_study_material(
-    id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
     service = StudyMaterialService(db)
     material = service.get_by_id(id)
     if not material:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Study material not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Study material not found",
+        )
     return StudyMaterialResponse.model_validate(material)
 
 
-def _material_abs_path(file_url: str) -> Optional[str]:
+def _material_abs_path(file_url: str) -> str | None:
     if not file_url:
         return None
     if file_url.startswith("/uploads/"):
@@ -106,24 +114,33 @@ def _material_abs_path(file_url: str) -> Optional[str]:
 
 @router.get("/{id}/view")
 async def view_study_material(
-    id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
     """Students must be able to view study materials."""
     service = StudyMaterialService(db)
     material = service.get_by_id(id)
     if not material:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Study material not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Study material not found",
+        )
 
     if current_user.role not in [UserRole.STUDENT, UserRole.TEACHER, UserRole.ADMIN]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied",
+        )
 
     abs_path = _material_abs_path(material.file_url)
-    if not abs_path or not os.path.exists(abs_path):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found on server")
+    if not abs_path or not Path(abs_path).exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found on server",
+        )
 
-    filename = material.file_name or os.path.basename(abs_path)
+    filename = material.file_name or Path(abs_path).name
 
     return FileResponse(
         abs_path,
@@ -135,30 +152,37 @@ async def view_study_material(
 
 @router.get("/{id}/download")
 async def download_study_material(
-    id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    id: str,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ):
     """Students must be able to download study materials."""
     service = StudyMaterialService(db)
     material = service.get_by_id(id)
     if not material:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Study material not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Study material not found",
+        )
 
     if current_user.role not in [UserRole.STUDENT, UserRole.TEACHER, UserRole.ADMIN]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Permission denied",
+        )
 
     # increment download count
-    try:
+    with contextlib.suppress(Exception):
         service.increment_download(id)
-    except Exception:
-        pass
 
     abs_path = _material_abs_path(material.file_url)
-    if not abs_path or not os.path.exists(abs_path):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found on server")
+    if not abs_path or not Path(abs_path).exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found on server",
+        )
 
-    filename = material.file_name or os.path.basename(abs_path)
+    filename = material.file_name or Path(abs_path).name
 
     return FileResponse(
         abs_path,
@@ -170,15 +194,15 @@ async def download_study_material(
 
 @router.put("/{id}", response_model=StudyMaterialResponse)
 async def update_study_material(
-    id: int,
-    title: Optional[str] = None,
-    description: Optional[str] = None,
-    material_type: Optional[str] = None,
-    academic_sessions_id: Optional[int] = None,
-    classroom_id: Optional[int] = None,
-    class_subject_id: Optional[int] = None,
-    teacher_subject_id: Optional[int] = None,
-    file: Optional[UploadFile] = File(None),
+    id: str,
+    title: str | None = None,
+    description: str | None = None,
+    material_type: str | None = None,
+    academic_sessions_id: str | None = None,
+    classroom_id: str | None = None,
+    class_subject_id: str | None = None,
+    teacher_subject_id: str | None = None,
+    file: Annotated[UploadFile | None, File()] = None,
     current_user: User = Depends(require_role(UserRole.ADMIN)),
     db: Session = Depends(get_db),
 ):
@@ -199,23 +223,31 @@ async def update_study_material(
         )
         return StudyMaterialResponse.model_validate(material)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        ) from e
 
 
 @router.delete("/{id}")
 async def delete_study_material(
-    id: int,
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
-    db: Session = Depends(get_db),
+    id: str,
+    current_user: Annotated[User, Depends(require_role(UserRole.ADMIN))],
+    db: Annotated[Session, Depends(get_db)],
 ):
     service = StudyMaterialService(db)
     try:
         service.delete_material(id)
-        return ResponseSchema(success=True, message="Study material deleted").model_dump()
+        return ResponseSchema(
+            success=True,
+            message="Study material deleted",
+        ).model_dump()
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        ) from e

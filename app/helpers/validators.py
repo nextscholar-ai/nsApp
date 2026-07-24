@@ -1,26 +1,26 @@
 # app/helpers/validators.py
 
 import re
-from datetime import datetime, date
-from typing import Optional
+from datetime import date
+
 
 class Validators:
     @staticmethod
     def validate_email(email: str) -> bool:
-        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
         return bool(re.match(pattern, email))
 
     @staticmethod
     def validate_phone(phone: str) -> bool:
-        return bool(re.match(r'^[0-9]{10}$', phone))
+        return bool(re.match(r"^[0-9]{10}$", phone))
 
     @staticmethod
     def validate_pincode(pincode: str) -> bool:
-        return bool(re.match(r'^[0-9]{6}$', pincode))
+        return bool(re.match(r"^[0-9]{6}$", pincode))
 
     @staticmethod
     def validate_blood_group(blood_group: str) -> bool:
-        valid_groups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
+        valid_groups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
         return blood_group in valid_groups
 
     @staticmethod

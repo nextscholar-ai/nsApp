@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 
 def load_institute_asset():
@@ -12,14 +13,13 @@ def load_institute_asset():
 
     # Optional: uploads/institute/logo.png
     logo_candidates = [
-        os.path.join("uploads", "institute", "logo.png"),
-        os.path.join("uploads", "institute_logo.png"),
+        Path("uploads") / "institute" / "logo.png",
+        Path("uploads") / "institute_logo.png",
     ]
     logo_path = None
     for p in logo_candidates:
-        if os.path.exists(p):
-            logo_path = p
+        if p.exists():
+            logo_path = str(p)
             break
 
     return logo_path, institute_name, institute_contact
-

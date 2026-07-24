@@ -1,37 +1,38 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import List, Optional, Dict, Any
-from datetime import datetime
+from pydantic import EmailStr, Field
 
 from .common import BaseSchema, PaginatedResponseSchema
 
 
 class TeacherAdminListResponse(BaseSchema):
-    user_id: int
+    user_id: str
     teacher_id: str
     teacher_name: str
     email: EmailStr
     phone: str
-    designation: Optional[str] = None
-    department: Optional[str] = None
-    assigned_classes: List[str] = Field(default_factory=list)
-    status: Optional[str] = None
+    designation: str | None = None
+    department: str | None = None
+    assigned_classes: list[str] = Field(default_factory=list)
+    status: str | None = None
 
 
 class StudentAdminListResponse(BaseSchema):
-    user_id: int
+    user_id: str
     student_id: str
     student_name: str
-    class_: Optional[str] = None
-    section: Optional[str] = None
+    class_: str | None = None
+    section: str | None = None
     email: EmailStr
     phone: str
-    status: Optional[str] = None
+    status: str | None = None
 
 
-class PaginatedTeacherAdminListResponse(PaginatedResponseSchema[TeacherAdminListResponse]):
+class PaginatedTeacherAdminListResponse(
+    PaginatedResponseSchema[TeacherAdminListResponse],
+):
     pass
 
 
-class PaginatedStudentAdminListResponse(PaginatedResponseSchema[StudentAdminListResponse]):
+class PaginatedStudentAdminListResponse(
+    PaginatedResponseSchema[StudentAdminListResponse],
+):
     pass
-

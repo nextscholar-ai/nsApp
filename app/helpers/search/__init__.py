@@ -14,46 +14,46 @@
 #   3. merge multiple raw signals for the same record into one ranked,
 #      explainable result (ranking_engine)
 
-from app.helpers.search.text_utils import (
-    normalize_text,
-    build_search_text,
-    looks_like_email,
-    QueryType,
-    classify_query,
-)
-from app.helpers.search.similarity_engine import (
-    FUZZY_MIN_SCORE,
-    EMAIL_FUZZY_MIN_SCORE,
-    FUZZY_CANDIDATE_POOL,
-    rank_candidates,
-)
 from app.helpers.search.ranking_engine import (
+    DEFAULT_RESULT_LIMIT,
     EXACT_MATCH_SCORE,
     FINAL_CONFIDENCE_FLOOR,
-    DEFAULT_RESULT_LIMIT,
     MAX_RESULT_LIMIT,
-    RawHit,
     RankedResult,
+    RawHit,
     confidence_label,
     rank_and_merge,
 )
+from app.helpers.search.similarity_engine import (
+    EMAIL_FUZZY_MIN_SCORE,
+    FUZZY_CANDIDATE_POOL,
+    FUZZY_MIN_SCORE,
+    rank_candidates,
+)
+from app.helpers.search.text_utils import (
+    QueryType,
+    build_search_text,
+    classify_query,
+    looks_like_email,
+    normalize_text,
+)
 
 __all__ = [
-    "normalize_text",
-    "build_search_text",
-    "looks_like_email",
-    "QueryType",
-    "classify_query",
-    "FUZZY_MIN_SCORE",
+    "DEFAULT_RESULT_LIMIT",
     "EMAIL_FUZZY_MIN_SCORE",
-    "FUZZY_CANDIDATE_POOL",
-    "rank_candidates",
     "EXACT_MATCH_SCORE",
     "FINAL_CONFIDENCE_FLOOR",
-    "DEFAULT_RESULT_LIMIT",
+    "FUZZY_CANDIDATE_POOL",
+    "FUZZY_MIN_SCORE",
     "MAX_RESULT_LIMIT",
-    "RawHit",
+    "QueryType",
     "RankedResult",
+    "RawHit",
+    "build_search_text",
+    "classify_query",
     "confidence_label",
+    "looks_like_email",
+    "normalize_text",
     "rank_and_merge",
+    "rank_candidates",
 ]

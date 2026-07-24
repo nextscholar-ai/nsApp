@@ -1,43 +1,23 @@
-import uuid
-import secrets
-
-from sqlalchemy import Enum as SAEnum
-
-from datetime import datetime
-from app.core.constants import *
-from app.core.enums import *
-from app.core.mixins import *
-from app.helpers.code_generators import *
-from app.helpers.validators import Validators
-from app.helpers.date_utils import DateUtils
-from app.helpers.security import SecurityUtils
-
-
 from sqlalchemy import (
-    Column,
-    Integer,
-    String,
-    Float,
-    Boolean,
-    Date,
-    DateTime,
-    Time,
-    Text,
-    ForeignKey,
-    UniqueConstraint,
     CheckConstraint,
+    Column,
+    Date,
+    ForeignKey,
     Index,
-    Numeric
-
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
 )
-
-from sqlalchemy.orm import (
-    relationship,
-    declared_attr
-)
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.orm import relationship
 
 from app.api.database import Base
-
+from app.core.constants import MAX_CODE_LENGTH
+from app.core.enums import FeeStatus
+from app.core.mixins import ActiveMixin, TimestampMixin
+from app.helpers.code_generators import generate_fee_code
 
 # ============================================================
 # AUTO TABLENAME
@@ -48,300 +28,110 @@ from app.api.database import Base
 # FEE TABLE
 # ============================================================
 
-class Fee(
 
-    Base,
-
-    TimestampMixin,
-
-    ActiveMixin
-
-):
-
+class Fee(Base, TimestampMixin, ActiveMixin):
     __tablename__ = "fees"
 
-    id = Column(
-        Integer,
-        primary_key=True
-    )
-
-    fee_id = Column(
-
-        String(30),
-
-        unique=True,
-
-        nullable=False,
-
-        default=generate_fee_code,
-
-        index=True
-
-    )
+    fee_code = Column(String(30), primary_key=True, default=generate_fee_code)
 
     # =====================================================
     # Academic
     # =====================================================
 
     academic_sessions_id = Column(
-
-        Integer,
-
-        ForeignKey(
-            "academic_sessions.id"
-        ),
-
+        String(MAX_CODE_LENGTH),
+        ForeignKey("academic_sessions.session_code"),
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
     student_class_id = Column(
-
-        Integer,
-
-        ForeignKey(
-            "student_classes.id"
-        ),
-
+        String(30),
+        ForeignKey("student_classes.student_class_code"),
         nullable=False,
-
-        index=True
-
+        index=True,
     )
 
     # =====================================================
     # Month
     # =====================================================
 
-    fee_month = Column(
+    fee_month = Column(Integer, nullable=False)
 
-        Integer,
-
-        nullable=False
-
-    )
-
-    fee_year = Column(
-
-        Integer,
-
-        nullable=False
-
-    )
+    fee_year = Column(Integer, nullable=False)
 
     # =====================================================
     # Amount
     # =====================================================
 
-    total_amount = Column(
+    total_amount = Column(Numeric(10, 2), nullable=False)
 
-        Numeric(10,2),
+    paid_amount = Column(Numeric(10, 2), nullable=False, default=0)
 
-        nullable=False
+    discount_amount = Column(Numeric(10, 2), nullable=False, default=0)
 
-    )
-
-    paid_amount = Column(
-
-        Numeric(10,2),
-
-        nullable=False,
-
-        default=0
-
-    )
-
-    discount_amount = Column(
-
-        Numeric(10,2),
-
-        nullable=False,
-
-        default=0
-
-    )
-
-    fine_amount = Column(
-
-        Numeric(10,2),
-
-        nullable=False,
-
-        default=0
-
-    )
+    fine_amount = Column(Numeric(10, 2), nullable=False, default=0)
 
     # =====================================================
     # Due
     # =====================================================
 
-    due_date = Column(
+    due_date = Column(Date, nullable=False)
 
-        Date,
-
-        nullable=False
-
-    )
-
-    paid_date = Column(
-
-        Date
-
-    )
+    paid_date = Column(Date)
 
     # =====================================================
     # Status
     # =====================================================
 
     status = Column(
-
         SAEnum(FeeStatus),
-
         nullable=False,
-
         default=FeeStatus.PENDING,
-
-        index=True
-
+        index=True,
     )
 
-    remarks = Column(
-
-        Text
-
-    )
+    remarks = Column(Text)
 
     # =====================================================
     # Audit
     # =====================================================
 
-    created_by = Column(
+    created_by = Column(String(30), ForeignKey("users.user_code"), nullable=False)
 
-        Integer,
+    updated_by = Column(String(30), ForeignKey("users.user_code"))
 
-        ForeignKey("users.id"),
-
-        nullable=False
-
-    )
-
-    updated_by = Column(
-
-        Integer,
-
-        ForeignKey("users.id")
-
-    )
-
-    deleted_by = Column(
-
-        Integer,
-
-        ForeignKey("users.id")
-
-    )
+    deleted_by = Column(String(30), ForeignKey("users.user_code"))
 
     # =====================================================
     # Relationships
     # =====================================================
 
-    academic_sessions = relationship(
-        "AcademicSession"
-    )
+    academic_sessions = relationship("AcademicSession")
 
-    student_class = relationship(
-        "StudentClass"
-    )
+    student_class = relationship("StudentClass")
 
-    creator = relationship(
-        "User",
-        foreign_keys=[created_by]
-    )
+    creator = relationship("User", foreign_keys=[created_by])
 
-    updater = relationship(
-        "User",
-        foreign_keys=[updated_by]
-    )
+    updater = relationship("User", foreign_keys=[updated_by])
 
-    deleter = relationship(
-        "User",
-        foreign_keys=[deleted_by]
-    )
-
-    
+    deleter = relationship("User", foreign_keys=[deleted_by])
 
     # =====================================================
     # Constraints
     # =====================================================
 
     __table_args__ = (
-
         UniqueConstraint(
-
             "student_class_id",
-
             "fee_month",
-
             "fee_year",
-
-            name="uq_student_fee"
-
+            name="uq_student_fee",
         ),
-
-        CheckConstraint(
-
-            "fee_month >=1 AND fee_month<=12",
-
-            name="ck_fee_month"
-
-        ),
-
-        CheckConstraint(
-
-            "paid_amount>=0",
-
-            name="ck_paid_amount"
-
-        ),
-
-        CheckConstraint(
-
-            "discount_amount>=0",
-
-            name="ck_discount_amount"
-
-        ),
-
-        CheckConstraint(
-
-            "fine_amount>=0",
-
-            name="ck_fine_amount"
-
-        ),
-
-        Index(
-
-            "idx_fee_student",
-
-            "student_class_id",
-
-            "status"
-
-        ),
-
-        Index(
-
-            "idx_fee_due",
-
-            "due_date",
-
-            "status"
-
-        ),
-
+        CheckConstraint("fee_month >=1 AND fee_month<=12", name="ck_fee_month"),
+        CheckConstraint("paid_amount>=0", name="ck_paid_amount"),
+        CheckConstraint("discount_amount>=0", name="ck_discount_amount"),
+        CheckConstraint("fine_amount>=0", name="ck_fine_amount"),
+        Index("idx_fee_student", "student_class_id", "status"),
+        Index("idx_fee_due", "due_date", "status"),
     )
-
-

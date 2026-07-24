@@ -18,10 +18,10 @@
 # repository) - see app/services/search/teacher_search_service.py for
 # the next entity built this way.
 
-from typing import List, Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
+from app.helpers.cache import search_cache
 from app.helpers.search import (
     DEFAULT_RESULT_LIMIT,
     EMAIL_FUZZY_MIN_SCORE,
@@ -32,7 +32,7 @@ from app.helpers.search import (
     rank_and_merge,
     rank_candidates,
 )
-from app.model import StudentProfile
+from app.model import StudentClass, StudentProfile
 from app.repositories.search import StudentSearchRepository
 from app.validators import SearchQueryValidator
 
@@ -42,8 +42,19 @@ ENTITY_TYPE = "student"
 class StudentSearchHit:
     """Plain result container handed to the router/schema layer."""
 
-    def __init__(self, *, student, confidence, confidence_label, match_type, matched_field, signals):
+    def __init__(
+        self,
+        *,
+        student,
+        student_class,
+        confidence,
+        confidence_label,
+        match_type,
+        matched_field,
+        signals,
+    ) -> None:
         self.student = student
+        self.student_class = student_class
         self.confidence = confidence
         self.confidence_label = confidence_label
         self.match_type = match_type
@@ -52,18 +63,24 @@ class StudentSearchHit:
 
 
 class StudentSearchService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
         self.repository = StudentSearchRepository(db)
 
-    def search(self, raw_query: str, *, limit: int = DEFAULT_RESULT_LIMIT) -> List[StudentSearchHit]:
+    def search(
+        self,
+        raw_query: str,
+        *,
+        limit: int = DEFAULT_RESULT_LIMIT,
+    ) -> list[StudentSearchHit]:
         """Always returns a ranked list of candidates - never auto-resolves
         a single "best" match, since names are never assumed unique. The
         caller (an admin/teacher picking the right student) makes the
-        final selection using the returned student_id."""
+        final selection using the returned student_id.
+        """
         validated = SearchQueryValidator.validate(raw_query)
 
-        hits: List[RawHit] = []
+        hits: list[RawHit] = []
         hits.extend(self._exact_hits(validated.normalized, validated.cleaned))
 
         if validated.query_type == QueryType.EMAIL:
@@ -81,7 +98,7 @@ class StudentSearchService:
     # Matchers
     # ------------------------------------------------------------
 
-    def _exact_hits(self, normalized_query: str, raw_query: str) -> List[RawHit]:
+    def _exact_hits(self, normalized_query: str, raw_query: str) -> list[RawHit]:
         rows = self.repository.find_exact(normalized_query, raw_query)
 
         results = []
@@ -93,7 +110,7 @@ class StudentSearchService:
                     score=100.0,
                     match_type="exact",
                     matched_field=matched_field,
-                )
+                ),
             )
         return results
 
@@ -111,21 +128,41 @@ class StudentSearchService:
             return "email"
         return "phone"
 
-    def _fuzzy_name_hits(self, raw_query: str) -> List[RawHit]:
-        candidates = self.repository.get_fuzzy_name_pool(FUZZY_CANDIDATE_POOL)
+    def _fuzzy_name_hits(self, raw_query: str) -> list[RawHit]:
+        candidates = search_cache.cached(
+            "student_fuzzy_name_pool",
+            lambda: self.repository.get_fuzzy_name_pool(FUZZY_CANDIDATE_POOL),
+        )
         matches = rank_candidates(raw_query, candidates)
 
         return [
-            RawHit(entity_key=key, score=score, match_type="fuzzy", matched_field="profile_text")
+            RawHit(
+                entity_key=key,
+                score=score,
+                match_type="fuzzy",
+                matched_field="profile_text",
+            )
             for key, score in matches
         ]
 
-    def _fuzzy_email_hits(self, raw_query: str) -> List[RawHit]:
-        candidates = self.repository.get_fuzzy_email_pool(FUZZY_CANDIDATE_POOL)
-        matches = rank_candidates(raw_query, candidates, score_cutoff=EMAIL_FUZZY_MIN_SCORE)
+    def _fuzzy_email_hits(self, raw_query: str) -> list[RawHit]:
+        candidates = search_cache.cached(
+            "student_fuzzy_email_pool",
+            lambda: self.repository.get_fuzzy_email_pool(FUZZY_CANDIDATE_POOL),
+        )
+        matches = rank_candidates(
+            raw_query,
+            candidates,
+            score_cutoff=EMAIL_FUZZY_MIN_SCORE,
+        )
 
         return [
-            RawHit(entity_key=key, score=score, match_type="fuzzy", matched_field="email")
+            RawHit(
+                entity_key=key,
+                score=score,
+                match_type="fuzzy",
+                matched_field="email",
+            )
             for key, score in matches
         ]
 
@@ -133,7 +170,7 @@ class StudentSearchService:
     # Hydration
     # ------------------------------------------------------------
 
-    def _hydrate(self, ranked) -> List[StudentSearchHit]:
+    def _hydrate(self, ranked) -> list[StudentSearchHit]:
         if not ranked:
             return []
 
@@ -141,20 +178,35 @@ class StudentSearchService:
         students = self.repository.get_by_ids(student_ids)
         by_id = {s.student_id: s for s in students}
 
+        student_classes = (
+            self.db.query(StudentClass)
+            .options(joinedload(StudentClass.classroom))
+            .filter(StudentClass.student_id.in_(student_ids), StudentClass.is_active)
+            .all()
+        )
+        class_map = {}
+        for sc in student_classes:
+            class_map[sc.student_id] = {"student_class": sc, "classroom": sc.classroom}
+
         hydrated = []
         for r in ranked:
             student = by_id.get(r.entity_key)
             if not student:
-                continue  # stale pointer (e.g. deactivated between query and hydration) - skip
+                continue
+            info = class_map.get(
+                r.entity_key,
+                {"student_class": None, "classroom": None},
+            )
             hydrated.append(
                 StudentSearchHit(
                     student=student,
+                    student_class=info["student_class"],
                     confidence=round(r.confidence, 2),
                     confidence_label=r.confidence_label,
                     match_type=r.match_type,
                     matched_field=r.matched_field,
                     signals=r.signals,
-                )
+                ),
             )
         return hydrated
 
@@ -163,10 +215,11 @@ class StudentSearchService:
     # either a raw student_id OR a search query and resolve to an ID.
     # ------------------------------------------------------------
 
-    def resolve_single(self, student_id: str) -> Optional[StudentProfile]:
+    def resolve_single(self, student_id: str) -> StudentProfile | None:
         """Straight ID lookup - no search/ranking involved. Existing
         business logic elsewhere in the codebase keeps using this (or
         the repositories it already had) unchanged; this is only here so
         callers that just resolved an ID out of a search result list can
-        hydrate it through the same repository."""
+        hydrate it through the same repository.
+        """
         return self.repository.get_by_id(student_id)

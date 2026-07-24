@@ -2,60 +2,51 @@
 # schemas.py - Production Ready & Aligned with models.py
 # ============================================================
 
-from pydantic import BaseModel, Field, EmailStr, field_validator, model_validator
-from typing import Optional, Generic, TypeVar, List, Dict, Any, Union
-from datetime import datetime, date, time
-from decimal import Decimal
-from  enum import Enum
+from datetime import date, datetime, time
+from typing import TypeVar
 
-from app.core.enums import (
-    UserRole, 
-    AssignmentStatus, 
-    ExamStatus, 
-    FeeStatus,
-    NoticeType,
-    NoticeAudience,
-    MaterialType,
-    AttendanceStatus,
-    LectureStatus,
-    PromotionType,
-    Gender
+from pydantic import Field
+
+from app.core.enums import AssignmentStatus
+
+from .common import (
+    ActiveSchema,
+    BaseSchema,
+    ClassRoomMinResponse,
+    TimestampSchema,
+    UserMinResponse,
 )
+from .teacher_student_links import StudentClassResponse
 
 # ============================================================
 # TYPE VARIABLES & BASE SCHEMAS
 # ============================================================
 
-T = TypeVar('T')
-
-
-from .common import *
-from .teacher_student_links import StudentClassResponse
-
+T = TypeVar("T")
 
 # ============================================================
 # AssignmentBase
 # ============================================================
 
+
 class AssignmentBase(BaseSchema):
     assignment_id: str = Field(..., max_length=30)
     title: str = Field(..., max_length=200)
-    description: Optional[str] = None
-    instructions: Optional[str] = None
+    description: str | None = None
+    instructions: str | None = None
     due_date: date
-    due_time: Optional[time] = None
+    due_time: time | None = None
     total_marks: float = 0.0
     passing_marks: float = 0.0
-    file_name: Optional[str] = Field(None, max_length=255)
-    file_path: Optional[str] = Field(None, max_length=500)
-    file_type: Optional[str] = Field(None, max_length=100)
-    file_size: Optional[int] = None
-    uploaded_by: Optional[int] = None
+    file_name: str | None = Field(None, max_length=255)
+    file_path: str | None = Field(None, max_length=500)
+    file_type: str | None = Field(None, max_length=100)
+    file_size: int | None = None
+    uploaded_by: str | None = None
     status: AssignmentStatus = AssignmentStatus.DRAFT
 
-
-    publish_at: Optional[datetime] = None
-    close_at: Optional[datetime] = None
+    publish_at: datetime | None = None
+    close_at: datetime | None = None
     total_students: int = 0
     checked_students: int = 0
 
@@ -64,102 +55,110 @@ class AssignmentBase(BaseSchema):
 # AssignmentCreate
 # ============================================================
 
+
 class AssignmentCreate(AssignmentBase):
-    academic_sessions_id: int
-    classroom_id: int
-    class_subject_id: int
-    teacher_subject_id: int
-    created_by: int
+    assignment_id: str | None = Field(None, max_length=30)
+    academic_sessions_id: str
+    classroom_id: str
+    class_subject_id: str
+    teacher_subject_id: str
+    created_by: str | None = None
 
 
 # ============================================================
 # AssignmentResponse
 # ============================================================
 
+
 class AssignmentResponse(AssignmentBase, TimestampSchema, ActiveSchema):
-    id: int
-    academic_sessions_id: int
-    classroom_id: int
-    class_subject_id: int
-    teacher_subject_id: int
-    created_by: int
-    updated_by: Optional[int] = None
-    deleted_by: Optional[int] = None
-    
-    classroom: Optional[ClassRoomMinResponse] = None
-    creator: Optional[UserMinResponse] = None
+    assignment_id: str | None = Field(None, max_length=30)
+    assignment_code: str
+    academic_sessions_id: str
+    classroom_id: str
+    class_subject_id: str
+    teacher_subject_id: str
+    created_by: str
+    updated_by: str | None = None
+    deleted_by: str | None = None
+
+    classroom: ClassRoomMinResponse | None = None
+    creator: UserMinResponse | None = None
 
 
 # ============================================================
 # AssignmentResultBase
 # ============================================================
 
+
 class AssignmentResultBase(BaseSchema):
     obtained_marks: float = 0.0
     percentage: float = 0.0
-    grade: Optional[str] = Field(None, max_length=10)
-    remarks: Optional[str] = None
+    grade: str | None = Field(None, max_length=10)
+    remarks: str | None = None
     is_checked: bool = False
-    checked_at: Optional[datetime] = None
+    checked_at: datetime | None = None
 
 
 # ============================================================
 # AssignmentResultCreate
 # ============================================================
 
+
 class AssignmentResultCreate(AssignmentResultBase):
-    assignment_id: int
-    student_class_id: int
-    checked_by: Optional[int] = None
+    assignment_id: str
+    student_class_id: str
+    checked_by: str | None = None
 
 
 # ============================================================
 # AssignmentResultResponse
 # ============================================================
 
-class AssignmentResultResponse(AssignmentResultBase, TimestampSchema, ActiveSchema):
-    id: int
-    assignment_id: int
-    student_class_id: int
-    checked_by: Optional[int] = None
-    
-    student_class: Optional[StudentClassResponse] = None
 
+class AssignmentResultResponse(AssignmentResultBase, TimestampSchema, ActiveSchema):
+    assignment_result_code: str
+    assignment_id: str
+    student_class_id: str
+    checked_by: str | None = None
+
+    student_class: StudentClassResponse | None = None
 
 
 # ============================================================
 # AssignmentUpdate
 # ============================================================
 
-class AssignmentUpdate(BaseSchema):
-    title: Optional[str] = Field(None, max_length=200)
-    description: Optional[str] = None
-    instructions: Optional[str] = None
-    due_date: Optional[date] = None
-    due_time: Optional[time] = None
-    total_marks: Optional[float] = None
-    passing_marks: Optional[float] = None
-    file_name: Optional[str] = Field(None, max_length=255)
-    file_path: Optional[str] = Field(None, max_length=500)
-    file_type: Optional[str] = Field(None, max_length=100)
-    file_size: Optional[int] = None
-    uploaded_by: Optional[int] = None
 
-    status: Optional[AssignmentStatus] = None
-    publish_at: Optional[datetime] = None
-    close_at: Optional[datetime] = None
-    is_active: Optional[bool] = None
+class AssignmentUpdate(BaseSchema):
+    title: str | None = Field(None, max_length=200)
+    description: str | None = None
+    instructions: str | None = None
+    due_date: date | None = None
+    due_time: time | None = None
+    total_marks: float | None = None
+    passing_marks: float | None = None
+    file_name: str | None = Field(None, max_length=255)
+    file_path: str | None = Field(None, max_length=500)
+    file_type: str | None = Field(None, max_length=100)
+    file_size: int | None = None
+    uploaded_by: str | None = None
+
+    status: AssignmentStatus | None = None
+    publish_at: datetime | None = None
+    close_at: datetime | None = None
+    is_active: bool | None = None
 
 
 # ============================================================
 # AssignmentResultUpdate
 # ============================================================
 
+
 class AssignmentResultUpdate(BaseSchema):
-    obtained_marks: Optional[float] = None
-    percentage: Optional[float] = None
-    grade: Optional[str] = Field(None, max_length=10)
-    remarks: Optional[str] = None
-    is_checked: Optional[bool] = None
-    checked_at: Optional[datetime] = None
-    checked_by: Optional[int] = None
+    obtained_marks: float | None = None
+    percentage: float | None = None
+    grade: str | None = Field(None, max_length=10)
+    remarks: str | None = None
+    is_checked: bool | None = None
+    checked_at: datetime | None = None
+    checked_by: str | None = None

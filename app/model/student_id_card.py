@@ -1,9 +1,10 @@
-from datetime import date
-from sqlalchemy import Column, Integer, String, ForeignKey, Date, DateTime, UniqueConstraint, Index
+from sqlalchemy import Column, Date, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.api.database import Base
-from app.core.mixins import TimestampMixin, ActiveMixin, AuditMixin
+from app.core.constants import MAX_CODE_LENGTH
+from app.core.mixins import ActiveMixin, AuditMixin, TimestampMixin
+from app.helpers.code_generators import generate_id_card_code
 
 
 class StudentIDCard(Base, TimestampMixin, ActiveMixin, AuditMixin):
@@ -11,7 +12,11 @@ class StudentIDCard(Base, TimestampMixin, ActiveMixin, AuditMixin):
 
     __tablename__ = "student_id_cards"
 
-    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    id_card_code = Column(
+        String(30),
+        primary_key=True,
+        default=generate_id_card_code,
+    )
 
     # Student
     student_id = Column(
@@ -23,8 +28,8 @@ class StudentIDCard(Base, TimestampMixin, ActiveMixin, AuditMixin):
 
     # Session-wise validity
     academic_sessions_id = Column(
-        Integer,
-        ForeignKey("academic_sessions.id", ondelete="RESTRICT"),
+        String(MAX_CODE_LENGTH),
+        ForeignKey("academic_sessions.session_code", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
@@ -63,4 +68,3 @@ class StudentIDCard(Base, TimestampMixin, ActiveMixin, AuditMixin):
         Index("idx_student_id_cards_student", "student_id"),
         Index("idx_student_id_cards_session", "academic_sessions_id"),
     )
-

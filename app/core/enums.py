@@ -1,74 +1,86 @@
 # app/core/enums.py
 
-from enum import Enum
+from enum import StrEnum
 
-class UserRole(str, Enum):
+
+class UserRole(StrEnum):
     ADMIN = "admin"
     TEACHER = "teacher"
     STUDENT = "student"
 
-class Gender(str, Enum):
+
+class Gender(StrEnum):
     MALE = "Male"
     FEMALE = "Female"
     OTHER = "Other"
 
-class UserStatus(str, Enum):
+
+class UserStatus(StrEnum):
     ACTIVE = "Active"
     INACTIVE = "Inactive"
     BLOCKED = "Blocked"
 
-class AssignmentStatus(str, Enum):
+
+class AssignmentStatus(StrEnum):
     DRAFT = "DRAFT"
     PUBLISHED = "PUBLISHED"
     CLOSED = "CLOSED"
     DELETED = "DELETED"
 
-class ExamStatus(str, Enum):
+
+class ExamStatus(StrEnum):
     DRAFT = "DRAFT"
     PUBLISHED = "PUBLISHED"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
 
-class FeeStatus(str, Enum):
+
+class FeeStatus(StrEnum):
     PENDING = "PENDING"
     PAID = "PAID"
     OVERDUE = "OVERDUE"
     CANCELLED = "CANCELLED"
 
-class NoticeType(str, Enum):
+
+class NoticeType(StrEnum):
     GENERAL = "GENERAL"
     ACADEMIC = "ACADEMIC"
     EXAM = "EXAM"
     FEE = "FEE"
     EVENT = "EVENT"
 
-class NoticeAudience(str, Enum):
+
+class NoticeAudience(StrEnum):
     ALL = "ALL"
     CLASS = "CLASS"
     SECTION = "SECTION"
     TEACHER = "TEACHER"
     STUDENT = "STUDENT"
 
-class MaterialType(str, Enum):
+
+class MaterialType(StrEnum):
     PDF = "PDF"
     VIDEO = "VIDEO"
     DOCUMENT = "DOCUMENT"
     LINK = "LINK"
     OTHER = "OTHER"
 
-class AttendanceStatus(str, Enum):
+
+class AttendanceStatus(StrEnum):
     PRESENT = "Present"
     ABSENT = "Absent"
     LATE = "Late"
     LEAVE = "Leave"
     HOLIDAY = "Holiday"
 
-class PromotionType(str, Enum):
+
+class PromotionType(StrEnum):
     PROMOTED = "PROMOTED"
     RETAINED = "RETAINED"
     TRANSFERRED = "TRANSFERRED"
 
-class LectureStatus(str, Enum):
+
+class LectureStatus(StrEnum):
     SCHEDULED = "Scheduled"
     ONGOING = "Ongoing"
     COMPLETED = "Completed"

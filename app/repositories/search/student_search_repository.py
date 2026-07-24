@@ -11,7 +11,7 @@
 # embedding table), so newly inserted or edited students are searchable
 # immediately - there is nothing to reindex or refresh.
 
-from typing import List, Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
@@ -21,15 +21,16 @@ from app.model import StudentProfile, User
 
 
 class StudentSearchRepository:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
-    def find_exact(self, normalized_query: str, raw_query: str) -> List[StudentProfile]:
+    def find_exact(self, normalized_query: str, raw_query: str) -> list[StudentProfile]:
         """Case-insensitive exact match across every field a user might
         type verbatim: name, student_id, admission/registration number,
         email, phone. Never assumes uniqueness - callers must expect and
         handle multiple rows back (e.g. two students both named "Mohammad
-        Ali" both come back and both must be shown)."""
+        Ali" both come back and both must be shown).
+        """
         return (
             self.db.query(StudentProfile)
             .join(User, User.id == StudentProfile.user_id)
@@ -48,13 +49,14 @@ class StudentSearchRepository:
             .all()
         )
 
-    def get_fuzzy_name_pool(self, limit: int) -> List[Tuple[str, str]]:
+    def get_fuzzy_name_pool(self, limit: int) -> list[tuple[str, str]]:
         """Returns (student_id, searchable_text_blob) pairs for NAME/CODE
         fuzzy matching - deliberately excludes email so that a query for
         "priya" doesn't fuzzy-collide with every student who happens to
         share an email domain. Bounded by `limit` regardless of table
         size - see app/helpers/search/similarity_engine.py for the
-        caller-side default."""
+        caller-side default.
+        """
         rows = (
             self.db.query(
                 StudentProfile.student_id,
@@ -84,10 +86,11 @@ class StudentSearchRepository:
             for row in rows
         ]
 
-    def get_fuzzy_email_pool(self, limit: int) -> List[Tuple[str, str]]:
+    def get_fuzzy_email_pool(self, limit: int) -> list[tuple[str, str]]:
         """Returns (student_id, email) pairs, used only when the query
         looks like an email - lets a typo'd email ("mohamad.ahmed@gmial.com")
-        still fuzzy-match the right account without polluting name search."""
+        still fuzzy-match the right account without polluting name search.
+        """
         rows = (
             self.db.query(StudentProfile.student_id, User.email)
             .join(User, User.id == StudentProfile.user_id)
@@ -97,7 +100,7 @@ class StudentSearchRepository:
         )
         return [(row.student_id, row.email) for row in rows]
 
-    def get_by_ids(self, student_ids: Sequence[str]) -> List[StudentProfile]:
+    def get_by_ids(self, student_ids: Sequence[str]) -> list[StudentProfile]:
         if not student_ids:
             return []
         return (
@@ -107,7 +110,7 @@ class StudentSearchRepository:
             .all()
         )
 
-    def get_by_id(self, student_id: str) -> Optional[StudentProfile]:
+    def get_by_id(self, student_id: str) -> StudentProfile | None:
         return (
             self.db.query(StudentProfile)
             .options(joinedload(StudentProfile.user))

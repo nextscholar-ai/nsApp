@@ -22,11 +22,12 @@ class Settings(BaseSettings):
     LOG_LEVEL: str
 
     FRONTEND_URL: str = "http://localhost:3000"
+    ALLOWED_ORIGINS: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,
-        extra="ignore"
+        extra="ignore",
     )
 
 

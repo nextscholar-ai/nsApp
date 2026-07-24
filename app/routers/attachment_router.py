@@ -7,17 +7,16 @@
 
 import base64
 import secrets
-from typing import Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.database import get_db
-from app.model import User, Attachment
-from app.dependencies import get_current_user
 from app.core.enums import UserRole
-
+from app.dependencies import get_current_user
+from app.model import Attachment, User
 
 router = APIRouter(prefix="/attachments", tags=["Attachments"])
 
@@ -48,32 +47,41 @@ def _decode_base64_to_bytes(data: str) -> bytes:
             data = data.split(",", 1)[1]
         return base64.b64decode(data, validate=True)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid base64 file data") from e
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid base64 file data",
+        ) from e
 
 
 def _generate_attachment_code() -> str:
-    return f"ATT-{secrets.token_hex(8).upper()}"[:30]
+    return f"ATC-{secrets.token_hex(8).upper()}"[:30]
 
 
 @router.post("/upload")
 async def upload_attachment(
     payload: dict,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Upload a file (base64-encoded) and associate it with any entity via
     entity_type/entity_id, e.g. {"entity_type": "assignment", "entity_id": 12}.
     """
-    entity_type: Optional[str] = payload.get("entity_type")
-    entity_id: Optional[int] = payload.get("entity_id")
-    file_name: Optional[str] = payload.get("file_name")
-    mime_type: Optional[str] = payload.get("mime_type")
-    file_data_b64: Optional[str] = payload.get("file_data")
+    entity_type: str | None = payload.get("entity_type")
+    entity_id: str | None = payload.get("entity_id")
+    file_name: str | None = payload.get("file_name")
+    mime_type: str | None = payload.get("mime_type")
+    file_data_b64: str | None = payload.get("file_data")
 
     if not entity_type or entity_id is None:
-        raise HTTPException(status_code=400, detail="entity_type and entity_id are required")
+        raise HTTPException(
+            status_code=400,
+            detail="entity_type and entity_id are required",
+        )
     if not file_name or not mime_type or not file_data_b64:
-        raise HTTPException(status_code=400, detail="file_name, mime_type, file_data are required")
+        raise HTTPException(
+            status_code=400,
+            detail="file_name, mime_type, file_data are required",
+        )
 
     mime_type_norm = _normalize_mime_type(mime_type)
     if mime_type_norm not in ALLOWED_MIME_TYPES:
@@ -84,7 +92,10 @@ async def upload_attachment(
     if len(raw) == 0:
         raise HTTPException(status_code=400, detail="File is empty")
     if len(raw) > MAX_FILE_SIZE_BYTES:
-        raise HTTPException(status_code=400, detail="File exceeds maximum allowed size (10 MB)")
+        raise HTTPException(
+            status_code=400,
+            detail="File exceeds maximum allowed size (10 MB)",
+        )
 
     # Always generate the code server-side to guarantee uniqueness.
     attachment_code = _generate_attachment_code()
@@ -92,7 +103,7 @@ async def upload_attachment(
     attachment = Attachment(
         attachment_code=attachment_code,
         entity_type=entity_type.lower(),
-        entity_id=int(entity_id),
+        entity_id=entity_id,
         file_name=file_name,
         mime_type=mime_type_norm,
         file_size=len(raw),
@@ -106,7 +117,7 @@ async def upload_attachment(
 
     return {
         "success": True,
-        "attachment_id": attachment.id,
+        "attachment_id": attachment.attachment_code,
         "attachment_code": attachment.attachment_code,
         "file_name": attachment.file_name,
         "file_size": attachment.file_size,
@@ -115,35 +126,39 @@ async def upload_attachment(
 
 @router.get("/{attachment_id}")
 async def download_attachment(
-    attachment_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    attachment_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     attachment = (
         db.query(Attachment)
-        .filter(Attachment.id == attachment_id, Attachment.is_active == True)
+        .filter(Attachment.attachment_code == attachment_id, Attachment.is_active)
         .first()
     )
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
     headers = {"Content-Disposition": f'inline; filename="{attachment.file_name}"'}
-    return Response(content=attachment.file_data, media_type=attachment.mime_type, headers=headers)
+    return Response(
+        content=attachment.file_data,
+        media_type=attachment.mime_type,
+        headers=headers,
+    )
 
 
 @router.get("/entity/{entity_type}/{entity_id}")
 async def list_entity_attachments(
     entity_type: str,
-    entity_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    entity_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
     attachments = (
         db.query(Attachment)
         .filter(
             Attachment.entity_type == entity_type.lower(),
             Attachment.entity_id == entity_id,
-            Attachment.is_active == True,
+            Attachment.is_active,
         )
         .order_by(Attachment.created_at.desc())
         .all()
@@ -153,7 +168,7 @@ async def list_entity_attachments(
         "success": True,
         "data": [
             {
-                "id": a.id,
+                "id": a.attachment_code,
                 "attachment_code": a.attachment_code,
                 "file_name": a.file_name,
                 "mime_type": a.mime_type,
@@ -165,21 +180,69 @@ async def list_entity_attachments(
     }
 
 
-@router.delete("/{attachment_id}")
-async def delete_attachment(
-    attachment_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+@router.put("/{attachment_id}")
+async def update_attachment(
+    attachment_id: str,
+    payload: dict,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """Soft-delete an attachment (uploader or admin only)."""
-    attachment = db.query(Attachment).filter(Attachment.id == attachment_id).first()
+    """Update attachment metadata (file_name, mime_type)."""
+    attachment = (
+        db.query(Attachment).filter(Attachment.attachment_code == attachment_id).first()
+    )
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
 
     is_owner = attachment.created_by == current_user.id
-    is_admin = current_user.role == UserRole.ADMIN or current_user.role == UserRole.ADMIN.value
+    is_admin = current_user.role in (UserRole.ADMIN, UserRole.ADMIN.value)
     if not (is_owner or is_admin):
-        raise HTTPException(status_code=403, detail="You do not have permission to delete this attachment")
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to update this attachment",
+        )
+
+    file_name = payload.get("file_name")
+    mime_type = payload.get("mime_type")
+    if file_name is not None:
+        attachment.file_name = file_name
+    if mime_type is not None:
+        mime_type_norm = _normalize_mime_type(mime_type)
+        if mime_type_norm not in ALLOWED_MIME_TYPES:
+            raise HTTPException(status_code=400, detail="Unsupported file type")
+        attachment.mime_type = mime_type_norm
+
+    db.commit()
+    db.refresh(attachment)
+
+    return {
+        "success": True,
+        "attachment_id": attachment.attachment_code,
+        "file_name": attachment.file_name,
+        "mime_type": attachment.mime_type,
+    }
+
+
+@router.delete("/{attachment_id}")
+async def delete_attachment(
+    attachment_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Soft-delete an attachment (uploader or admin only)."""
+    attachment = (
+        db.query(Attachment).filter(Attachment.attachment_code == attachment_id).first()
+    )
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    is_owner = attachment.created_by == current_user.id
+    is_admin = current_user.role in (UserRole.ADMIN, UserRole.ADMIN.value)
+    if not (is_owner or is_admin):
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to delete this attachment",
+        )
 
     attachment.is_active = False
     db.commit()

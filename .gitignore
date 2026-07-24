@@ -6,7 +6,7 @@ routers/_pycache_/*
 venv/
 __pycache__/
 *.pyc
-.env/
+
 .pytest_cache/
 .mypy_cache/
 .vscode/
@@ -15,3 +15,5 @@ logs/
 uploads/
 .coverage
 htmlcov/
+.aider*
+.env

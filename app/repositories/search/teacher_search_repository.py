@@ -12,7 +12,7 @@
 # indirection. app/helpers/search/* is where the actually-shared logic
 # lives.
 
-from typing import List, Optional, Sequence, Tuple
+from collections.abc import Sequence
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
@@ -22,10 +22,10 @@ from app.model import TeacherProfile, User
 
 
 class TeacherSearchRepository:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
-    def find_exact(self, normalized_query: str, raw_query: str) -> List[TeacherProfile]:
+    def find_exact(self, normalized_query: str, raw_query: str) -> list[TeacherProfile]:
         return (
             self.db.query(TeacherProfile)
             .join(User, User.id == TeacherProfile.user_id)
@@ -43,7 +43,7 @@ class TeacherSearchRepository:
             .all()
         )
 
-    def get_fuzzy_name_pool(self, limit: int) -> List[Tuple[str, str]]:
+    def get_fuzzy_name_pool(self, limit: int) -> list[tuple[str, str]]:
         rows = (
             self.db.query(
                 TeacherProfile.teacher_id,
@@ -71,7 +71,7 @@ class TeacherSearchRepository:
             for row in rows
         ]
 
-    def get_fuzzy_email_pool(self, limit: int) -> List[Tuple[str, str]]:
+    def get_fuzzy_email_pool(self, limit: int) -> list[tuple[str, str]]:
         rows = (
             self.db.query(TeacherProfile.teacher_id, User.email)
             .join(User, User.id == TeacherProfile.user_id)
@@ -81,7 +81,7 @@ class TeacherSearchRepository:
         )
         return [(row.teacher_id, row.email) for row in rows]
 
-    def get_by_ids(self, teacher_ids: Sequence[str]) -> List[TeacherProfile]:
+    def get_by_ids(self, teacher_ids: Sequence[str]) -> list[TeacherProfile]:
         if not teacher_ids:
             return []
         return (
@@ -91,7 +91,7 @@ class TeacherSearchRepository:
             .all()
         )
 
-    def get_by_id(self, teacher_id: str) -> Optional[TeacherProfile]:
+    def get_by_id(self, teacher_id: str) -> TeacherProfile | None:
         return (
             self.db.query(TeacherProfile)
             .options(joinedload(TeacherProfile.user))

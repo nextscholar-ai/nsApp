@@ -1,52 +1,43 @@
-# ============================================================
-# schemas.py - Production Ready & Aligned with models.py
-# ============================================================
+from __future__ import annotations
 
-from pydantic import BaseModel, Field, EmailStr, field_validator, model_validator
-from typing import Optional, Generic, TypeVar, List, Dict, Any, Union
-from datetime import datetime, date, time
+from datetime import date, datetime, time
 from decimal import Decimal
-from  enum import Enum
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from app.core.enums import (
-    UserRole, 
-    AssignmentStatus, 
-    ExamStatus, 
-    FeeStatus,
-    NoticeType,
-    NoticeAudience,
-    MaterialType,
-    AttendanceStatus,
-    LectureStatus,
-    PromotionType,
-    Gender
-)
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.core.enums import UserRole
+
+if TYPE_CHECKING:
+    from app.schemas.user import UserResponse
+
 
 # ============================================================
 # TYPE VARIABLES & BASE SCHEMAS
 # ============================================================
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 # ============================================================
 # BaseSchema
 # ============================================================
 
+
 class BaseSchema(BaseModel):
-    """Base schema with common configurations for Pydantic V2"""
-    
+    """Base schema with common configurations for Pydantic V2."""
+
     model_config = {
         "from_attributes": True,
         "json_encoders": {
             datetime: lambda v: v.isoformat() if v else None,
             date: lambda v: v.isoformat() if v else None,
             time: lambda v: v.isoformat() if v else None,
-            Decimal: lambda v: float(v) if v else 0.0
+            Decimal: lambda v: float(v) if v else 0.0,
         },
         "validate_assignment": True,
         "arbitrary_types_allowed": True,
-        "populate_by_name": True
+        "populate_by_name": True,
     }
 
 
@@ -54,18 +45,22 @@ class BaseSchema(BaseModel):
 # TimestampSchema
 # ============================================================
 
+
 class TimestampSchema(BaseSchema):
-    """Reflecting TimestampMixin"""
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    """Reflecting TimestampMixin."""
+
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 # ============================================================
 # ActiveSchema
 # ============================================================
 
+
 class ActiveSchema(BaseSchema):
-    """Reflecting ActiveMixin"""
+    """Reflecting ActiveMixin."""
+
     is_active: bool = True
 
 
@@ -73,18 +68,21 @@ class ActiveSchema(BaseSchema):
 # AuditSchema
 # ============================================================
 
+
 class AuditSchema(BaseSchema):
-    """Reflecting AuditMixin"""
-    created_by: Optional[int] = None
-    updated_by: Optional[int] = None
+    """Reflecting AuditMixin."""
+
+    created_by: str | None = None
+    updated_by: str | None = None
 
 
 # ============================================================
 # UserMinResponse
 # ============================================================
 
+
 class UserMinResponse(ActiveSchema):
-    id: int
+    user_code: str
     email: str
     phone: str
     role: UserRole
@@ -94,30 +92,32 @@ class UserMinResponse(ActiveSchema):
 # StudentProfileMinResponse
 # ============================================================
 
+
 class StudentProfileMinResponse(ActiveSchema):
     student_id: str
-    student_name:Optional[str]=None
-    admission_number: Optional[str] = None
-    gender: Optional[str] = None
+    student_name: str | None = None
+    admission_number: str | None = None
+    gender: str | None = None
 
 
 # ============================================================
 # TeacherProfileMinResponse
 # ============================================================
 
+
 class TeacherProfileMinResponse(ActiveSchema):
     teacher_id: str
-    teacher_name: Optional[str]=None
-    employee_code: Optional[str] = None
-    designation: Optional[str] = None
+    teacher_name: str | None = None
+    employee_code: str | None = None
+    designation: str | None = None
 
 
 # ============================================================
 # ClassRoomMinResponse
 # ============================================================
 
+
 class ClassRoomMinResponse(ActiveSchema):
-    id: int
     class_code: str
     class_name: str
     section: str
@@ -128,8 +128,8 @@ class ClassRoomMinResponse(ActiveSchema):
 # SubjectMinResponse
 # ============================================================
 
+
 class SubjectMinResponse(ActiveSchema):
-    id: int
     subject_code: str
     subject_name: str
     subject_type: str
@@ -139,8 +139,8 @@ class SubjectMinResponse(ActiveSchema):
 # AcademicSessionMinResponse
 # ============================================================
 
+
 class AcademicSessionMinResponse(ActiveSchema):
-    id: int
     session_code: str
     session_name: str
     is_current: bool
@@ -150,10 +150,11 @@ class AcademicSessionMinResponse(ActiveSchema):
 # ResponseSchema
 # ============================================================
 
+
 class ResponseSchema(BaseSchema, Generic[T]):
     success: bool = True
-    data: Optional[T] = None
-    message: Optional[str] = None
+    data: T | None = None
+    message: str | None = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -161,10 +162,11 @@ class ResponseSchema(BaseSchema, Generic[T]):
 # PaginatedResponseSchema
 # ============================================================
 
+
 class PaginatedResponseSchema(BaseSchema, Generic[T]):
     success: bool = True
-    data: List[T]
-    pagination: Dict[str, Any]
+    data: list[T]
+    pagination: dict[str, Any]
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -172,11 +174,12 @@ class PaginatedResponseSchema(BaseSchema, Generic[T]):
 # LoginRequest
 # ============================================================
 
+
 class LoginRequest(BaseSchema):
     email: EmailStr = Field(..., description="User email")
     password: str = Field(..., min_length=8, description="User password")
-    
-    @field_validator('email')
+
+    @field_validator("email")
     @classmethod
     def validate_email(cls, v: EmailStr) -> EmailStr:
         return v.lower().strip()
@@ -186,12 +189,13 @@ class LoginRequest(BaseSchema):
 # LoginResponse
 # ============================================================
 
+
 class LoginResponse(BaseSchema):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int = Field(3600, description="Token expiry in seconds")
-    user: 'UserResponse'
+    user: UserResponse
 
 
 class RefreshTokenRequest(BaseSchema):
@@ -206,8 +210,8 @@ class RefreshTokenResponse(BaseSchema):
 
 
 class LogoutRequest(BaseSchema):
-    refresh_token: Optional[str] = None
-    device_token: Optional[str] = None
+    refresh_token: str | None = None
+    device_token: str | None = None
     all_devices: bool = False
 
 
@@ -232,4 +236,3 @@ class VerifyEmailRequest(BaseSchema):
 
 class ResendOTPRequest(BaseSchema):
     email: EmailStr
-

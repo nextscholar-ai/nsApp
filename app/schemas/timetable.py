@@ -2,39 +2,29 @@
 # schemas.py - Production Ready & Aligned with models.py
 # ============================================================
 
-from pydantic import BaseModel, Field, EmailStr, field_validator, model_validator
-from typing import Optional, Generic, TypeVar, List, Dict, Any, Union
-from datetime import datetime, date, time
-from decimal import Decimal
-from  enum import Enum
+from datetime import time
+from typing import TypeVar
 
-from app.core.enums import (
-    UserRole, 
-    AssignmentStatus, 
-    ExamStatus, 
-    FeeStatus,
-    NoticeType,
-    NoticeAudience,
-    MaterialType,
-    AttendanceStatus,
-    LectureStatus,
-    PromotionType,
-    Gender
+from pydantic import Field, model_validator
+
+from .common import (
+    ActiveSchema,
+    AuditSchema,
+    BaseSchema,
+    ClassRoomMinResponse,
+    TimestampSchema,
 )
 
 # ============================================================
 # TYPE VARIABLES & BASE SCHEMAS
 # ============================================================
 
-T = TypeVar('T')
-
-
-from .common import *
-
+T = TypeVar("T")
 
 # ============================================================
 # WeekDayBase
 # ============================================================
+
 
 class WeekDayBase(BaseSchema):
     day_code: str = Field(..., min_length=3, max_length=3)
@@ -46,13 +36,15 @@ class WeekDayBase(BaseSchema):
 # WeekDayResponse
 # ============================================================
 
+
 class WeekDayResponse(WeekDayBase, TimestampSchema, ActiveSchema):
-    id: int
+    pass
 
 
 # ============================================================
 # WeekDayCreate
 # ============================================================
+
 
 class WeekDayCreate(WeekDayBase):
     pass
@@ -61,6 +53,7 @@ class WeekDayCreate(WeekDayBase):
 # ============================================================
 # TimeSlotBase
 # ============================================================
+
 
 class TimeSlotBase(BaseSchema):
     slot_code: str = Field(..., min_length=1, max_length=10)
@@ -72,9 +65,10 @@ class TimeSlotBase(BaseSchema):
     is_break: bool = False
 
     @model_validator(mode="after")
-    def validate_times(self) -> 'TimeSlotBase':
+    def validate_times(self) -> "TimeSlotBase":
         if self.end_time <= self.start_time:
-            raise ValueError('end_time must be after start_time')
+            msg = "end_time must be after start_time"
+            raise ValueError(msg)
         return self
 
 
@@ -82,13 +76,15 @@ class TimeSlotBase(BaseSchema):
 # TimeSlotResponse
 # ============================================================
 
+
 class TimeSlotResponse(TimeSlotBase, TimestampSchema, ActiveSchema):
-    id: int
+    pass
 
 
 # ============================================================
 # TimeSlotCreate
 # ============================================================
+
 
 class TimeSlotCreate(TimeSlotBase):
     pass
@@ -98,106 +94,123 @@ class TimeSlotCreate(TimeSlotBase):
 # ClassTimeTableBase
 # ============================================================
 
+
 class ClassTimeTableBase(BaseSchema):
     timetable_id: str = Field(..., max_length=30)
-    room_number: Optional[str] = Field(None, max_length=50)
-    remarks: Optional[str] = None
+    room_number: str | None = Field(None, max_length=50)
+    remarks: str | None = None
 
 
 # ============================================================
 # ClassTimeTableCreate
 # ============================================================
 
+
 class ClassTimeTableCreate(ClassTimeTableBase):
-    academic_sessions_id: int
-    classroom_id: int
+    academic_sessions_id: str
+    classroom_id: str
     class_subject_id: int
     teacher_subject_id: int
-    week_day_id: int
-    time_slot_id: int
+    week_day_id: str
+    time_slot_id: str
 
 
 # ============================================================
 # ClassTimeTableResponse
 # ============================================================
 
-class ClassTimeTableResponse(ClassTimeTableBase, TimestampSchema, ActiveSchema, AuditSchema):
-    id: int
-    academic_sessions_id: int
-    classroom_id: int
-    class_subject_id: int
-    teacher_subject_id: int
-    week_day_id: int
-    time_slot_id: int
-    
-    classroom: Optional[ClassRoomMinResponse] = None
-    week_day: Optional[WeekDayResponse] = None
-    time_slot: Optional[TimeSlotResponse] = None
+
+class ClassTimeTableResponse(
+    ClassTimeTableBase,
+    TimestampSchema,
+    ActiveSchema,
+    AuditSchema,
+):
+    timetable_code: str
+    academic_sessions_id: str
+    classroom_id: str
+    class_subject_id: str
+    teacher_subject_id: str
+    week_day_id: str
+    time_slot_id: str
+
+    classroom: ClassRoomMinResponse | None = None
+    week_day: WeekDayResponse | None = None
+    time_slot: TimeSlotResponse | None = None
 
 
 # ============================================================
 # ClassTimeTableUpdate
 # ============================================================
 
+
 class ClassTimeTableUpdate(BaseSchema):
-    room_number: Optional[str] = Field(None, max_length=50)
-    remarks: Optional[str] = None
-    academic_sessions_id: Optional[int] = None
-    classroom_id: Optional[int] = None
-    class_subject_id: Optional[int] = None
-    teacher_subject_id: Optional[int] = None
-    week_day_id: Optional[int] = None
-    time_slot_id: Optional[int] = None
-    is_active: Optional[bool] = None
+    room_number: str | None = Field(None, max_length=50)
+    remarks: str | None = None
+    academic_sessions_id: str | None = None
+    classroom_id: str | None = None
+    class_subject_id: int | None = None
+    teacher_subject_id: int | None = None
+    week_day_id: str | None = None
+    time_slot_id: str | None = None
+    is_active: bool | None = None
 
 
 # ============================================================
 # TeacherAvailabilityBase
 # ============================================================
 
+
 class TeacherAvailabilityBase(BaseSchema):
     availability_id: str = Field(..., max_length=30)
     is_available: bool = True
-    reason: Optional[str] = Field(None, max_length=255)
-    remarks: Optional[str] = None
+    reason: str | None = Field(None, max_length=255)
+    remarks: str | None = None
 
 
 # ============================================================
 # TeacherAvailabilityCreate
 # ============================================================
 
+
 class TeacherAvailabilityCreate(TeacherAvailabilityBase):
-    academic_sessions_id: int
+    academic_sessions_id: str
     teacher_subject_id: int
-    week_day_id: int
-    time_slot_id: int
+    week_day_id: str
+    time_slot_id: str
 
 
 # ============================================================
 # TeacherAvailabilityResponse
 # ============================================================
 
-class TeacherAvailabilityResponse(TeacherAvailabilityBase, TimestampSchema, ActiveSchema, AuditSchema):
-    id: int
-    academic_sessions_id: int
-    teacher_subject_id: int
-    week_day_id: int
-    time_slot_id: int
-    
-    week_day: Optional[WeekDayResponse] = None
-    time_slot: Optional[TimeSlotResponse] = None
 
+class TeacherAvailabilityResponse(
+    TeacherAvailabilityBase,
+    TimestampSchema,
+    ActiveSchema,
+    AuditSchema,
+):
+    id: int
+    academic_sessions_id: str
+    teacher_subject_id: int
+    week_day_id: str
+    time_slot_id: str
+
+    week_day: WeekDayResponse | None = None
+    time_slot: TimeSlotResponse | None = None
 
 
 # ============================================================
 # TeacherAvailabilityUpdate
 # ============================================================
 
+
 class TeacherAvailabilityUpdate(BaseSchema):
-    is_available: Optional[bool] = None
-    reason: Optional[str] = Field(None, max_length=255)
-    remarks: Optional[str] = None
-    academic_sessions_id: Optional[int] = None
-    teacher_subject_id: Optional[int] = None
-    week_day_id: Optional[int] = None
-    time_slot_id: Optional[int] = None
+    is_available: bool | None = None
+    reason: str | None = Field(None, max_length=255)
+    remarks: str | None = None
+    academic_sessions_id: str | None = None
+    teacher_subject_id: int | None = None
+    week_day_id: str | None = None
+    time_slot_id: str | None = None

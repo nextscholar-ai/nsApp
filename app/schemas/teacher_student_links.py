@@ -2,54 +2,48 @@
 # schemas.py - Production Ready & Aligned with models.py
 # ============================================================
 
-from pydantic import BaseModel, Field, EmailStr, field_validator, model_validator
-from typing import Optional, Generic, TypeVar, List, Dict, Any, Union
-from datetime import datetime, date, time
-from decimal import Decimal
-from  enum import Enum
+from datetime import date
+from typing import TypeVar
 
-from app.core.enums import (
-    UserRole, 
-    AssignmentStatus, 
-    ExamStatus, 
-    FeeStatus,
-    NoticeType,
-    NoticeAudience,
-    MaterialType,
-    AttendanceStatus,
-    LectureStatus,
-    PromotionType,
-    Gender
+from pydantic import Field
+
+from .common import (
+    ActiveSchema,
+    BaseSchema,
+    ClassRoomMinResponse,
+    StudentProfileMinResponse,
+    SubjectMinResponse,
+    TeacherProfileMinResponse,
+    TimestampSchema,
+    UserMinResponse,
 )
 
 # ============================================================
 # TYPE VARIABLES & BASE SCHEMAS
 # ============================================================
 
-T = TypeVar('T')
-
-
-from .common import *
-
+T = TypeVar("T")
 
 # ============================================================
 # TeacherSubjectBase
 # ============================================================
 
+
 class TeacherSubjectBase(BaseSchema):
     is_class_teacher: bool = False
-    remarks: Optional[str] = Field(None, max_length=300)
+    remarks: str | None = Field(None, max_length=300)
 
 
 # ============================================================
 # TeacherSubjectCreate
 # ============================================================
 
+
 class TeacherSubjectCreate(TeacherSubjectBase):
-    academic_sessions_id: int
-    class_subject_id: int
-    classroom_id: int
-    subject_id: int
+    academic_sessions_id: str
+    class_subject_id: str
+    classroom_id: str
+    subject_id: str
     teacher_id: str
 
 
@@ -57,94 +51,99 @@ class TeacherSubjectCreate(TeacherSubjectBase):
 # TeacherSubjectResponse
 # ============================================================
 
+
 class TeacherSubjectResponse(TeacherSubjectBase, TimestampSchema, ActiveSchema):
-    id: int
-    academic_sessions_id: int
-    class_subject_id: int
-    classroom_id: int
-    subject_id: int
+    teacher_subject_code: str
+    academic_sessions_id: str
+    class_subject_id: str
+    classroom_id: str
+    subject_id: str
     teacher_id: str
-    
-    classroom: Optional[ClassRoomMinResponse] = None
-    subject: Optional[SubjectMinResponse] = None
-    teacher: Optional[TeacherProfileMinResponse] = None
+
+    classroom: ClassRoomMinResponse | None = None
+    subject: SubjectMinResponse | None = None
+    teacher: TeacherProfileMinResponse | None = None
 
 
 # ============================================================
 # StudentClassBase
 # ============================================================
 
+
 class StudentClassBase(BaseSchema):
     roll_number: int = Field(..., ge=1)
     admission_date: date
     status: str = "ACTIVE"
     roll_number_locked: bool = False
-    remarks: Optional[str] = Field(None, max_length=500)
+    remarks: str | None = Field(None, max_length=500)
 
 
 # ============================================================
 # StudentClassCreate
 # ============================================================
 
+
 class StudentClassCreate(StudentClassBase):
-    academic_sessions_id: int
+    academic_sessions_id: str
     student_id: str
-    classroom_id: int
+    classroom_id: str
 
 
 # ============================================================
 # StudentClassResponse
 # ============================================================
 
+
 class StudentClassResponse(StudentClassBase, TimestampSchema, ActiveSchema):
-    id: int
-    academic_sessions_id: int
+    student_class_code: str
+    academic_sessions_id: str
     student_id: str
-    classroom_id: int
-    
-    student: Optional[StudentProfileMinResponse] = None
-    classroom: Optional[ClassRoomMinResponse] = None
+    classroom_id: str
+
+    student: StudentProfileMinResponse | None = None
+    classroom: ClassRoomMinResponse | None = None
 
 
 # ============================================================
 # StudentPromotionHistoryBase
 # ============================================================
 
+
 class StudentPromotionHistoryBase(BaseSchema):
     previous_roll_number: int
     new_roll_number: int
     promotion_date: date
     promotion_type: str = "PROMOTED"
-    remarks: Optional[str] = Field(None, max_length=500)
+    remarks: str | None = Field(None, max_length=500)
 
 
 # ============================================================
 # StudentPromotionHistoryCreate
 # ============================================================
 
+
 class StudentPromotionHistoryCreate(StudentPromotionHistoryBase):
     student_id: str
-    from_session_id: int
-    to_session_id: int
-    from_classroom_id: int
-    to_classroom_id: int
-    promoted_by_user_id: Optional[int] = None
+    from_session_id: str
+    to_session_id: str
+    from_classroom_id: str
+    to_classroom_id: str
+    promoted_by_user_id: int | None = None
 
 
 # ============================================================
 # StudentPromotionHistoryResponse
 # ============================================================
 
+
 class StudentPromotionHistoryResponse(StudentPromotionHistoryBase, TimestampSchema):
-    id: int
+    promotion_code: str
     student_id: str
-    from_session_id: int
-    to_session_id: int
-    from_classroom_id: int
-    to_classroom_id: int
-    promoted_by_user_id: Optional[int] = None
-    
-    student: Optional[StudentProfileMinResponse] = None
-    promoted_by: Optional[UserMinResponse] = None
+    from_session_id: str
+    to_session_id: str
+    from_classroom_id: str
+    to_classroom_id: str
+    promoted_by_user_id: str | None = None
 
-
+    student: StudentProfileMinResponse | None = None
+    promoted_by: UserMinResponse | None = None

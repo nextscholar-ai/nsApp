@@ -1,15 +1,14 @@
-import smtplib
 import os
-
-from email.mime.text import MIMEText
+import smtplib
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
 SMTP_SERVER = os.getenv("SMTP_SERVER")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_EMAIL = os.getenv("SMTP_EMAIL")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 
@@ -18,7 +17,8 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 # CORE EMAIL SENDER
 # =========================
 
-def send_email(to_email: str, subject: str, body: str):
+
+def send_email(to_email: str, subject: str, body: str) -> bool | None:
 
     try:
         msg = MIMEMultipart()
@@ -36,18 +36,16 @@ def send_email(to_email: str, subject: str, body: str):
         server.send_message(msg)
         server.quit()
 
-        print(f"Email sent OK -> to={to_email} subject={subject}")
         return True
 
-    except Exception as e:
-
-        print("Email error:", e)
+    except Exception:
         return False
 
 
 # =========================
 # OTP EMAIL
 # =========================
+
 
 def send_otp_email(email: str, otp: str, purpose: str = "verification"):
 
@@ -72,6 +70,7 @@ Do not share it with anyone.
 # RESET PASSWORD EMAIL
 # =========================
 
+
 def send_reset_email(email: str, link: str):
 
     subject = "Password Reset Request"
@@ -90,6 +89,7 @@ This link expires in 30 minutes.
 # =========================
 # VERIFICATION EMAIL
 # =========================
+
 
 def send_verification_email(email: str, link: str):
     subject = "Verify Your Email"

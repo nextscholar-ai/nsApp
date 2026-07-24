@@ -12,7 +12,6 @@
 # No database code, no API/schema code here.
 
 from dataclasses import dataclass, field
-from typing import Dict, List
 
 # A hand-typed exact match (ID, code, or exact email) is maximum confidence.
 EXACT_MATCH_SCORE = 100.0
@@ -52,7 +51,9 @@ class RankedResult:
     confidence_label: str
     match_type: str
     matched_field: str
-    signals: List[str] = field(default_factory=list)  # e.g. ["exact:email", "fuzzy:student_name"]
+    signals: list[str] = field(
+        default_factory=list,
+    )  # e.g. ["exact:email", "fuzzy:student_name"]
 
 
 def _normalize_score(hit: RawHit) -> float:
@@ -62,7 +63,11 @@ def _normalize_score(hit: RawHit) -> float:
     return max(0.0, min(100.0, hit.score))  # fuzzy is already 0-100
 
 
-def rank_and_merge(hits: List[RawHit], *, limit: int = DEFAULT_RESULT_LIMIT) -> List[RankedResult]:
+def rank_and_merge(
+    hits: list[RawHit],
+    *,
+    limit: int = DEFAULT_RESULT_LIMIT,
+) -> list[RankedResult]:
     """Merges multiple raw hits for the same entity into one ranked list.
 
     Merge rule: an entity's final confidence is the MAX of its normalized
@@ -75,7 +80,7 @@ def rank_and_merge(hits: List[RawHit], *, limit: int = DEFAULT_RESULT_LIMIT) -> 
     distinct entity_key gets its own RankedResult, so two different
     students both named "Mohammad" always both appear.
     """
-    best_by_entity: Dict[str, RankedResult] = {}
+    best_by_entity: dict[str, RankedResult] = {}
 
     for hit in hits:
         normalized = _normalize_score(hit)
@@ -100,6 +105,8 @@ def rank_and_merge(hits: List[RawHit], *, limit: int = DEFAULT_RESULT_LIMIT) -> 
             existing.match_type = hit.match_type
             existing.matched_field = hit.matched_field
 
-    results = [r for r in best_by_entity.values() if r.confidence >= FINAL_CONFIDENCE_FLOOR]
+    results = [
+        r for r in best_by_entity.values() if r.confidence >= FINAL_CONFIDENCE_FLOOR
+    ]
     results.sort(key=lambda r: r.confidence, reverse=True)
     return results[:limit]

@@ -1,21 +1,21 @@
 from __future__ import annotations
 
-import os
+import contextlib
 import shutil
-from datetime import datetime
-from typing import List, Optional, Tuple
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar
 
-from fastapi import UploadFile
-from sqlalchemy.orm import Session
-
-from app.model import StudyMaterial
 from app.core.enums import MaterialType
+from app.model import StudyMaterial
+
+if TYPE_CHECKING:
+    from fastapi import UploadFile
+    from sqlalchemy.orm import Session
 
 
 class StudyMaterialService:
-    """Service layer for StudyMaterial CRUD + secure file handling."""
-
-    ALLOWED_EXTENSIONS = {
+    ALLOWED_EXTENSIONS: ClassVar[set[str]] = {
         ".pdf",
         ".doc",
         ".docx",
@@ -29,7 +29,7 @@ class StudyMaterialService:
         ".mp4",
     }
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session) -> None:
         self.db = db
 
     @staticmethod
@@ -38,7 +38,7 @@ class StudyMaterialService:
 
     @staticmethod
     def _safe_ext(filename: str) -> str:
-        _, ext = os.path.splitext(filename or "")
+        ext = Path(filename or "").suffix
         return ext.lower()
 
     @classmethod
@@ -46,7 +46,8 @@ class StudyMaterialService:
         ext = cls._safe_ext(filename)
         if ext not in cls.ALLOWED_EXTENSIONS:
             allowed = ", ".join(sorted(cls.ALLOWED_EXTENSIONS))
-            raise ValueError(f"Unsupported file extension '{ext}'. Allowed: {allowed}")
+            msg = f"Unsupported file extension '{ext}'. Allowed: {allowed}"
+            raise ValueError(msg)
         return ext
 
     @classmethod
@@ -75,58 +76,59 @@ class StudyMaterialService:
             if hasattr(MaterialType, fallback):
                 return getattr(MaterialType, fallback)
 
-        return list(MaterialType)[0]
+        return next(iter(MaterialType))
 
     def _build_storage_name(self, material_id: str, filename: str) -> str:
         ext = self.validate_extension(filename)
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
         rand = str(abs(hash((material_id, filename, timestamp))))[-8:]
-        stored_name = f"{material_id}_{timestamp}_{rand}{ext}"
-        return stored_name
+        return f"{material_id}_{timestamp}_{rand}{ext}"
 
     @staticmethod
     def _ensure_dir(path: str) -> None:
-        os.makedirs(path, exist_ok=True)
+        Path(path).mkdir(parents=True, exist_ok=True)
 
     def _save_upload(self, file: UploadFile, absolute_path: str) -> int:
-        self._ensure_dir(os.path.dirname(absolute_path))
-        size = 0
-        with open(absolute_path, "wb") as buffer:
+        self._ensure_dir(str(Path(absolute_path).parent))
+        with Path(absolute_path).open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
             buffer.flush()
-            size = os.path.getsize(absolute_path)
-        return size
+            return Path(absolute_path).stat().st_size
 
     @staticmethod
-    def _safe_delete_file(path: Optional[str]) -> None:
+    def _safe_delete_file(path: str | None) -> None:
         if not path:
             return
         try:
-            if os.path.exists(path):
-                os.remove(path)
-        except Exception:
+            p = Path(path)
+            if p.exists():
+                p.unlink()
+        except Exception:  # noqa: S110
             pass
 
     # ---------------------------
     # DB operations
     # ---------------------------
 
-    def get_by_id(self, material_db_id: int) -> Optional[StudyMaterial]:
+    def get_by_id(self, material_db_id: str) -> StudyMaterial | None:
         return (
             self.db.query(StudyMaterial)
-            .filter(StudyMaterial.id == material_db_id, StudyMaterial.is_active == True)  # noqa: E712
+            .filter(
+                StudyMaterial.material_code == material_db_id,
+                StudyMaterial.is_active.is_(True),
+            )
             .first()
         )
 
-    def list_all(self) -> List[StudyMaterial]:
+    def list_all(self) -> list[StudyMaterial]:
         return (
             self.db.query(StudyMaterial)
-            .filter(StudyMaterial.is_active == True)  # noqa: E712
+            .filter(StudyMaterial.is_active.is_(True))
             .order_by(StudyMaterial.created_at.desc())
             .all()
         )
 
-    def list_by_class_subject(self, class_subject_id: int) -> List[StudyMaterial]:
+    def list_by_class_subject(self, class_subject_id: str) -> list[StudyMaterial]:
         return (
             self.db.query(StudyMaterial)
             .filter(
@@ -141,25 +143,24 @@ class StudyMaterialService:
         self,
         *,
         title: str,
-        description: Optional[str],
-        academic_sessions_id: int,
-        classroom_id: int,
-        class_subject_id: int,
-        teacher_subject_id: int,
-        uploaded_by: int,
+        description: str | None,
+        academic_sessions_id: str,
+        classroom_id: str,
+        class_subject_id: str,
+        teacher_subject_id: str,
+        uploaded_by: str,
         file: UploadFile,
-        material_type: Optional[str] = None,
+        material_type: str | None = None,
     ) -> StudyMaterial:
         if file is None:
-            raise ValueError("file is required")
+            msg = "file is required"
+            raise ValueError(msg)
 
-        ext = self.validate_extension(file.filename)
+        self.validate_extension(file.filename)
         mt = self.derive_material_type(file.filename)
         if material_type:
-            try:
+            with contextlib.suppress(Exception):
                 mt = MaterialType[material_type]
-            except Exception:
-                pass
 
         material = StudyMaterial(
             title=title,
@@ -180,8 +181,8 @@ class StudyMaterialService:
         self.db.commit()
         self.db.refresh(material)
 
-        stored_name = self._build_storage_name(material.material_id, file.filename)
-        abs_path = os.path.join(self.get_upload_root(), stored_name)
+        stored_name = self._build_storage_name(material.material_code, file.filename)
+        abs_path = str(Path(self.get_upload_root()) / stored_name)
 
         size = self._save_upload(file, abs_path)
 
@@ -196,21 +197,22 @@ class StudyMaterialService:
 
     def update_material(
         self,
-        material_id: int,
+        material_id: str,
         *,
-        title: Optional[str],
-        description: Optional[str],
-        academic_sessions_id: Optional[int],
-        classroom_id: Optional[int],
-        class_subject_id: Optional[int],
-        teacher_subject_id: Optional[int],
-        file: Optional[UploadFile],
-        material_type: Optional[str],
-        updated_by: Optional[int],
+        title: str | None,
+        description: str | None,
+        academic_sessions_id: str | None,
+        classroom_id: str | None,
+        class_subject_id: str | None,
+        teacher_subject_id: str | None,
+        file: UploadFile | None,
+        material_type: str | None,
+        updated_by: str | None,
     ) -> StudyMaterial:
         material = self.get_by_id(material_id)
         if not material:
-            raise ValueError("Study material not found")
+            msg = "Study material not found"
+            raise ValueError(msg)
 
         if title is not None:
             material.title = title
@@ -232,14 +234,12 @@ class StudyMaterialService:
         if file is not None:
             mt = self.derive_material_type(file.filename)
             if material_type:
-                try:
+                with contextlib.suppress(Exception):
                     mt = MaterialType[material_type]
-                except Exception:
-                    pass
 
             material.material_type = mt
-            stored_name = self._build_storage_name(material.material_id, file.filename)
-            abs_path = os.path.join(self.get_upload_root(), stored_name)
+            stored_name = self._build_storage_name(material.material_code, file.filename)
+            abs_path = str(Path(self.get_upload_root()) / stored_name)
             size = self._save_upload(file, abs_path)
 
             material.file_name = file.filename
@@ -256,10 +256,11 @@ class StudyMaterialService:
         self.db.refresh(material)
         return material
 
-    def delete_material(self, material_id: int) -> None:
+    def delete_material(self, material_id: str) -> None:
         material = self.get_by_id(material_id)
         if not material:
-            raise ValueError("Study material not found")
+            msg = "Study material not found"
+            raise ValueError(msg)
 
         abs_path = None
         if material.file_url and material.file_url.startswith("/uploads/"):
@@ -273,10 +274,10 @@ class StudyMaterialService:
         self.db.commit()
         self._safe_delete_file(abs_path)
 
-    def increment_download(self, material_id: int) -> None:
+    def increment_download(self, material_id: str) -> None:
         material = self.get_by_id(material_id)
         if not material:
-            raise ValueError("Study material not found")
+            msg = "Study material not found"
+            raise ValueError(msg)
         material.download_count = (material.download_count or 0) + 1
         self.db.commit()
-

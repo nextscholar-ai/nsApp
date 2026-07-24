@@ -1,12 +1,12 @@
 # app/helpers/security.py
 
-import hashlib
 import secrets
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import UTC, datetime, timedelta
+
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 class SecurityUtils:
     @staticmethod
@@ -27,4 +27,4 @@ class SecurityUtils:
 
     @staticmethod
     def get_otp_expiry(minutes: int = 5) -> datetime:
-        return datetime.utcnow() + timedelta(minutes=minutes)
+        return datetime.now(UTC) + timedelta(minutes=minutes)

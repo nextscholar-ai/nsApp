@@ -2,56 +2,47 @@
 # schemas.py - Production Ready & Aligned with models.py
 # ============================================================
 
-from pydantic import BaseModel, Field, EmailStr, field_validator, model_validator
-from typing import Optional, Generic, TypeVar, List, Dict, Any, Union
-from datetime import datetime, date, time
-from decimal import Decimal
-from  enum import Enum
+from datetime import date, datetime, time
+from typing import TypeVar
 
-from app.core.enums import (
-    UserRole, 
-    AssignmentStatus, 
-    ExamStatus, 
-    FeeStatus,
-    NoticeType,
-    NoticeAudience,
-    MaterialType,
-    AttendanceStatus,
-    LectureStatus,
-    PromotionType,
-    Gender
+from pydantic import Field
+
+from app.core.enums import ExamStatus
+
+from .common import (
+    ActiveSchema,
+    BaseSchema,
+    ClassRoomMinResponse,
+    TimestampSchema,
 )
+from .teacher_student_links import StudentClassResponse
 
 # ============================================================
 # TYPE VARIABLES & BASE SCHEMAS
 # ============================================================
 
-T = TypeVar('T')
-
-
-from .common import *
-from .teacher_student_links import StudentClassResponse
-
+T = TypeVar("T")
 
 # ============================================================
 # ExamBase
 # ============================================================
 
+
 class ExamBase(BaseSchema):
     exam_id: str = Field(..., max_length=30)
     exam_name: str = Field(..., max_length=150)
     exam_type: str = Field(..., max_length=50)
-    description: Optional[str] = None
+    description: str | None = None
     exam_date: date
-    start_time: Optional[time] = None
-    end_time: Optional[time] = None
-    duration_minutes: Optional[int] = None
-    room_number: Optional[str] = Field(None, max_length=50)
+    start_time: time | None = None
+    end_time: time | None = None
+    duration_minutes: int | None = None
+    room_number: str | None = Field(None, max_length=50)
     total_marks: float
     passing_marks: float
     status: ExamStatus = ExamStatus.DRAFT
-    publish_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    publish_at: datetime | None = None
+    completed_at: datetime | None = None
     total_students: int = 0
     result_uploaded: int = 0
 
@@ -60,9 +51,10 @@ class ExamBase(BaseSchema):
 # ExamCreate
 # ============================================================
 
+
 class ExamCreate(ExamBase):
-    academic_sessions_id: int
-    classroom_id: int
+    academic_sessions_id: str
+    classroom_id: str
     class_subject_id: int
     teacher_subject_id: int
     created_by: int
@@ -72,88 +64,93 @@ class ExamCreate(ExamBase):
 # ExamResponse
 # ============================================================
 
+
 class ExamResponse(ExamBase, TimestampSchema, ActiveSchema):
-    id: int
-    academic_sessions_id: int
-    classroom_id: int
-    class_subject_id: int
-    teacher_subject_id: int
-    created_by: int
-    updated_by: Optional[int] = None
-    deleted_by: Optional[int] = None
-    
-    classroom: Optional[ClassRoomMinResponse] = None
+    exam_code: str
+    academic_sessions_id: str
+    classroom_id: str
+    class_subject_id: str
+    teacher_subject_id: str
+    created_by: str
+    updated_by: str | None = None
+    deleted_by: str | None = None
+
+    classroom: ClassRoomMinResponse | None = None
 
 
 # ============================================================
 # ExamResultBase
 # ============================================================
 
+
 class ExamResultBase(BaseSchema):
     obtained_marks: float = 0.0
     percentage: float = 0.0
-    grade: Optional[str] = Field(None, max_length=10)
-    remarks: Optional[str] = None
-    rank_in_class: Optional[int] = None
+    grade: str | None = Field(None, max_length=10)
+    remarks: str | None = None
+    rank_in_class: int | None = None
     is_absent: bool = False
-    checked_at: Optional[datetime] = None
+    checked_at: datetime | None = None
 
 
 # ============================================================
 # ExamResultCreate
 # ============================================================
 
+
 class ExamResultCreate(ExamResultBase):
     exam_id: int
     student_class_id: int
-    checked_by: Optional[int] = None
+    checked_by: int | None = None
 
 
 # ============================================================
 # ExamResultResponse
 # ============================================================
 
-class ExamResultResponse(ExamResultBase, TimestampSchema, ActiveSchema):
-    id: int
-    exam_id: int
-    student_class_id: int
-    checked_by: Optional[int] = None
-    
-    student_class: Optional[StudentClassResponse] = None
 
+class ExamResultResponse(ExamResultBase, TimestampSchema, ActiveSchema):
+    exam_result_code: str
+    exam_id: str
+    student_class_id: str
+    checked_by: str | None = None
+
+    student_class: StudentClassResponse | None = None
 
 
 # ============================================================
 # ExamUpdate
 # ============================================================
 
+
 class ExamUpdate(BaseSchema):
-    exam_name: Optional[str] = Field(None, max_length=150)
-    exam_type: Optional[str] = Field(None, max_length=50)
-    description: Optional[str] = None
-    exam_date: Optional[date] = None
-    start_time: Optional[time] = None
-    end_time: Optional[time] = None
-    duration_minutes: Optional[int] = None
-    room_number: Optional[str] = Field(None, max_length=50)
-    total_marks: Optional[float] = None
-    passing_marks: Optional[float] = None
-    status: Optional[ExamStatus] = None
-    publish_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    is_active: Optional[bool] = None
+    exam_name: str | None = Field(None, max_length=150)
+    exam_type: str | None = Field(None, max_length=50)
+    description: str | None = None
+    exam_date: date | None = None
+    start_time: time | None = None
+    end_time: time | None = None
+    duration_minutes: int | None = None
+    room_number: str | None = Field(None, max_length=50)
+    total_marks: float | None = None
+    passing_marks: float | None = None
+    status: ExamStatus | None = None
+    publish_at: datetime | None = None
+    completed_at: datetime | None = None
+    is_active: bool | None = None
 
 
 # ============================================================
 # ExamResultUpdate
 # ============================================================
 
+
 class ExamResultUpdate(BaseSchema):
-    obtained_marks: Optional[float] = None
-    percentage: Optional[float] = None
-    grade: Optional[str] = Field(None, max_length=10)
-    remarks: Optional[str] = None
-    rank_in_class: Optional[int] = None
-    is_absent: Optional[bool] = None
-    checked_at: Optional[datetime] = None
-    checked_by: Optional[int] = None
+    obtained_marks: float | None = None
+    percentage: float | None = None
+    grade: str | None = Field(None, max_length=10)
+    remarks: str | None = None
+    rank_in_class: int | None = None
+    is_absent: bool | None = None
+    checked_at: datetime | None = None
+    checked_by: int | None = None

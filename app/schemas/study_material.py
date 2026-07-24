@@ -1,50 +1,36 @@
-# ============================================================
-# schemas.py - Production Ready & Aligned with models.py
-# ============================================================
+from typing import TypeVar
 
-from pydantic import BaseModel, Field, EmailStr, field_validator, model_validator
-from typing import Optional, Generic, TypeVar, List, Dict, Any, Union
-from datetime import datetime, date, time
-from decimal import Decimal
-from  enum import Enum
+from pydantic import Field
 
-from app.core.enums import (
-    UserRole, 
-    AssignmentStatus, 
-    ExamStatus, 
-    FeeStatus,
-    NoticeType,
-    NoticeAudience,
-    MaterialType,
-    AttendanceStatus,
-    LectureStatus,
-    PromotionType,
-    Gender
+from app.core.enums import MaterialType
+
+from .common import (
+    ActiveSchema,
+    BaseSchema,
+    ClassRoomMinResponse,
+    TimestampSchema,
+    UserMinResponse,
 )
 
 # ============================================================
 # TYPE VARIABLES & BASE SCHEMAS
 # ============================================================
 
-T = TypeVar('T')
-
-
-from .common import *
-
+T = TypeVar("T")
 
 # ============================================================
 # StudyMaterialBase
 # ============================================================
 
+
 class StudyMaterialBase(BaseSchema):
-    material_id: str = Field(..., max_length=30)
     title: str = Field(..., max_length=200)
-    description: Optional[str] = None
+    description: str | None = None
     material_type: MaterialType
     file_name: str = Field(..., max_length=255)
     file_url: str = Field(..., max_length=500)
-    file_size: Optional[int] = None
-    mime_type: Optional[str] = Field(None, max_length=100)
+    file_size: int | None = None
+    mime_type: str | None = Field(None, max_length=100)
     download_count: int = 0
 
 
@@ -52,39 +38,38 @@ class StudyMaterialBase(BaseSchema):
 # StudyMaterialCreate
 # ============================================================
 
+
 class StudyMaterialCreate(StudyMaterialBase):
-    academic_sessions_id: int
-    classroom_id: int
-    class_subject_id: int
-    teacher_subject_id: int
-    uploaded_by: int
+    academic_sessions_id: str
+    classroom_id: str
+    class_subject_id: str
+    teacher_subject_id: str
+    uploaded_by: str
 
 
 # ============================================================
 # StudyMaterialResponse
 # ============================================================
 
+
 class StudyMaterialResponse(StudyMaterialBase, TimestampSchema, ActiveSchema):
-    id: int
-    academic_sessions_id: int
-    classroom_id: int
-    class_subject_id: int
-    teacher_subject_id: int
-    uploaded_by: int
-    
-    classroom: Optional[ClassRoomMinResponse] = None
-    uploader: Optional[UserMinResponse] = None
+    material_code: str
+    academic_sessions_id: str
+    classroom_id: str
+    class_subject_id: str
+    teacher_subject_id: str
+    uploaded_by: str
+
+    classroom: ClassRoomMinResponse | None = None
+    uploader: UserMinResponse | None = None
 
 
 class StudyMaterialUpdate(BaseSchema):
-    title: Optional[str] = Field(None, max_length=200)
-    description: Optional[str] = None
-    material_type: Optional[MaterialType] = None
+    title: str | None = Field(None, max_length=200)
+    description: str | None = None
+    material_type: MaterialType | None = None
 
-    academic_sessions_id: Optional[int] = None
-    classroom_id: Optional[int] = None
-    class_subject_id: Optional[int] = None
-    teacher_subject_id: Optional[int] = None
-
-
-
+    academic_sessions_id: str | None = None
+    classroom_id: str | None = None
+    class_subject_id: str | None = None
+    teacher_subject_id: str | None = None

@@ -13,7 +13,6 @@
 # )
 
 
-
 # from app.schemas import (
 #     ExamCreate,
 #     ExamUpdate,
@@ -144,13 +143,11 @@
 #     )
 
 
-
 #     db.add(result)
 #     db.commit()
 #     db.refresh(result)
 
 #     return result
-
 
 
 # # =====================================================
@@ -163,7 +160,7 @@
 # )
 # def update_exam(
 
-#     exam_id: int,
+#     exam_id: str,
 
 #     data: ExamUpdate,
 
@@ -262,7 +259,7 @@
 # )
 # def single_result(
 
-#     exam_id: int,
+#     exam_id: str,
 
 #     student: StudentProfile = Depends(
 #         get_current_student
@@ -327,34 +324,27 @@
 #     )
 
 
-
 # ============================================================
 # routers/exam_routers.py - Exam Routes
 # ============================================================
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from datetime import UTC, datetime
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import datetime
 
 from app.api.database import get_db
-from app.model import User, Exam,TeacherProfile, TeacherSubject, ExamResult
+from app.core.enums import ExamStatus, UserRole
+from app.dependencies import get_current_user, require_role
+from app.model import Exam, ExamResult, TeacherProfile, TeacherSubject, User
 from app.schemas import (
-    ExamResponse,
     ExamCreate,
-    ExamUpdate,
-    ExamResultResponse,
+    ExamResponse,
     ExamResultCreate,
-    ExamResultUpdate,
-    ResponseSchema,
-    PaginatedResponseSchema
+    ExamResultResponse,
+    ExamUpdate,
 )
-from app.dependencies import (
-    get_current_user,
-    get_current_teacher_profile,
-    require_role
-)
-from app.core.enums import UserRole, ExamStatus
 
 router = APIRouter(prefix="/exams", tags=["Exams"])
 
@@ -362,37 +352,42 @@ router = APIRouter(prefix="/exams", tags=["Exams"])
 # EXAM CRUD
 # ============================================================
 
+
 @router.post("/", response_model=ExamResponse)
 async def create_exam(
     exam_data: ExamCreate,
-    current_user: User = Depends(require_role(UserRole.TEACHER)),
-    db: Session = Depends(get_db)
+    current_user: Annotated[User, Depends(require_role(UserRole.TEACHER))],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Create a new exam.
-    """
-    teacher = db.query(TeacherProfile).filter(
-        TeacherProfile.user_id == current_user.id
-    ).first()
-    
+    """Create a new exam."""
+    teacher = (
+        db.query(TeacherProfile)
+        .filter(TeacherProfile.user_id == current_user.id)
+        .first()
+    )
+
     if not teacher:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Teacher profile not found"
+            detail="Teacher profile not found",
         )
-    
+
     # Verify teacher is assigned to this class
-    teacher_subject = db.query(TeacherSubject).filter(
-        TeacherSubject.id == exam_data.teacher_subject_id,
-        TeacherSubject.teacher_id == teacher.teacher_id
-    ).first()
-    
+    teacher_subject = (
+        db.query(TeacherSubject)
+        .filter(
+            TeacherSubject.id == exam_data.teacher_subject_id,
+            TeacherSubject.teacher_id == teacher.teacher_id,
+        )
+        .first()
+    )
+
     if not teacher_subject:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not assigned to this class"
+            detail="You are not assigned to this class",
         )
-    
+
     new_exam = Exam(
         exam_id=exam_data.exam_id,
         academic_sessions_id=exam_data.academic_sessions_id,
@@ -412,162 +407,164 @@ async def create_exam(
         status=exam_data.status,
         publish_at=exam_data.publish_at,
         completed_at=exam_data.completed_at,
-        created_by=current_user.id
+        created_by=current_user.id,
     )
-    
+
     db.add(new_exam)
     db.commit()
     db.refresh(new_exam)
-    
+
     return ExamResponse.model_validate(new_exam)
 
-@router.get("/", response_model=List[ExamResponse])
+
+@router.get("/", response_model=list[ExamResponse])
 async def get_exams(
-    classroom_id: Optional[int] = None,
-    status: Optional[ExamStatus] = None,
+    classroom_id: str | None = None,
+    status: ExamStatus | None = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """
-    Get exams with filters.
-    """
+    """Get exams with filters."""
     query = db.query(Exam)
-    
+
     if classroom_id:
         query = query.filter(Exam.classroom_id == classroom_id)
-    
+
     if status:
         query = query.filter(Exam.status == status)
-    
+
     # For teachers, only show their exams
     if current_user.role == UserRole.TEACHER:
-        teacher = db.query(TeacherProfile).filter(
-            TeacherProfile.user_id == current_user.id
-        ).first()
+        teacher = (
+            db.query(TeacherProfile)
+            .filter(TeacherProfile.user_id == current_user.id)
+            .first()
+        )
         if teacher:
             teacher_subject_ids = db.query(TeacherSubject.id).filter(
-                TeacherSubject.teacher_id == teacher.teacher_id
+                TeacherSubject.teacher_id == teacher.teacher_id,
             )
             query = query.filter(Exam.teacher_subject_id.in_(teacher_subject_ids))
-    
+
     exams = query.order_by(Exam.exam_date.desc()).all()
     return [ExamResponse.model_validate(e) for e in exams]
 
+
 @router.get("/{exam_id}", response_model=ExamResponse)
 async def get_exam(
-    exam_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    exam_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Get exam by ID.
-    """
+    """Get exam by ID."""
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Exam not found"
+            detail="Exam not found",
         )
     return ExamResponse.model_validate(exam)
+
 
 @router.put("/{exam_id}", response_model=ExamResponse)
 async def update_exam(
-    exam_id: int,
+    exam_id: str,
     exam_data: ExamUpdate,
-    current_user: User = Depends(require_role(UserRole.TEACHER)),
-    db: Session = Depends(get_db)
+    current_user: Annotated[User, Depends(require_role(UserRole.TEACHER))],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Update exam.
-    """
+    """Update exam."""
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Exam not found"
+            detail="Exam not found",
         )
-    
+
     # Check ownership
     if exam.created_by != current_user.id and current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only update your own exams"
+            detail="You can only update your own exams",
         )
-    
-    for key, value in exam_data.dict(exclude_unset=True).items():
+
+    for key, value in exam_data.model_dump(exclude_unset=True).items():
         setattr(exam, key, value)
-    
+
     exam.updated_by = current_user.id
     db.commit()
     db.refresh(exam)
-    
+
     return ExamResponse.model_validate(exam)
+
 
 @router.delete("/{exam_id}")
 async def delete_exam(
-    exam_id: int,
-    current_user: User = Depends(require_role(UserRole.TEACHER)),
-    db: Session = Depends(get_db)
+    exam_id: str,
+    current_user: Annotated[User, Depends(require_role(UserRole.TEACHER))],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Delete exam.
-    """
+    """Delete exam."""
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Exam not found"
+            detail="Exam not found",
         )
-    
+
     # Check ownership
     if exam.created_by != current_user.id and current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only delete your own exams"
+            detail="You can only delete your own exams",
         )
-    
+
     exam.is_active = False
     exam.deleted_by = current_user.id
     db.commit()
-    
+
     return {"success": True, "message": "Exam deleted successfully"}
+
 
 # ============================================================
 # EXAM RESULTS
 # ============================================================
 
-@router.post("/{exam_id}/results", response_model=List[ExamResultResponse])
+
+@router.post("/{exam_id}/results", response_model=list[ExamResultResponse])
 async def upload_exam_results(
-    exam_id: int,
-    results_data: List[ExamResultCreate],
-    current_user: User = Depends(require_role(UserRole.TEACHER)),
-    db: Session = Depends(get_db)
+    exam_id: str,
+    results_data: list[ExamResultCreate],
+    current_user: Annotated[User, Depends(require_role(UserRole.TEACHER))],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Upload results for an exam.
-    """
+    """Upload results for an exam."""
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Exam not found"
+            detail="Exam not found",
         )
-    
+
     # Check ownership
     if exam.created_by != current_user.id and current_user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only upload results for your own exams"
+            detail="You can only upload results for your own exams",
         )
-    
+
     uploaded = []
     for item in results_data:
         # Create or update result
-        existing = db.query(ExamResult).filter(
-            ExamResult.exam_id == exam_id,
-            ExamResult.student_class_id == item.student_class_id
-        ).first()
-        
+        existing = (
+            db.query(ExamResult)
+            .filter(
+                ExamResult.exam_id == exam_id,
+                ExamResult.student_class_id == item.student_class_id,
+            )
+            .first()
+        )
+
         if existing:
             existing.obtained_marks = item.obtained_marks
             existing.percentage = item.percentage
@@ -575,7 +572,7 @@ async def upload_exam_results(
             existing.remarks = item.remarks
             existing.rank_in_class = item.rank_in_class
             existing.is_absent = item.is_absent
-            existing.checked_at = datetime.utcnow()
+            existing.checked_at = datetime.now(UTC)
             existing.checked_by = current_user.id
             uploaded.append(existing)
         else:
@@ -588,37 +585,39 @@ async def upload_exam_results(
                 remarks=item.remarks,
                 rank_in_class=item.rank_in_class,
                 is_absent=item.is_absent,
-                checked_at=datetime.utcnow(),
-                checked_by=current_user.id
+                checked_at=datetime.now(UTC),
+                checked_by=current_user.id,
             )
             db.add(new_result)
             uploaded.append(new_result)
-    
+
     # Update result count
     exam.result_uploaded = len(uploaded)
-    
+
     db.commit()
-    
+
     return [ExamResultResponse.model_validate(r) for r in uploaded]
 
-@router.get("/{exam_id}/results", response_model=List[ExamResultResponse])
+
+@router.get("/{exam_id}/results", response_model=list[ExamResultResponse])
 async def get_exam_results(
-    exam_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    exam_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Get results for an exam.
-    """
+    """Get results for an exam."""
     exam = db.query(Exam).filter(Exam.id == exam_id).first()
     if not exam:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Exam not found"
+            detail="Exam not found",
         )
-    
-    results = db.query(ExamResult).filter(
-        ExamResult.exam_id == exam_id
-    ).order_by(ExamResult.rank_in_class).all()
-    
+
+    results = (
+        db.query(ExamResult)
+        .filter(ExamResult.exam_id == exam_id)
+        .order_by(ExamResult.rank_in_class)
+        .all()
+    )
+
     return [ExamResultResponse.model_validate(r) for r in results]

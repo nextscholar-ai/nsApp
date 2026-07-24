@@ -10,12 +10,18 @@
 # format into the API response. Services never execute raw SQL
 # themselves - that's the repository's job.
 
-from app.services.search.student_search_service import StudentSearchService, StudentSearchHit
-from app.services.search.teacher_search_service import TeacherSearchService, TeacherSearchHit
+from app.services.search.student_search_service import (
+    StudentSearchHit,
+    StudentSearchService,
+)
+from app.services.search.teacher_search_service import (
+    TeacherSearchHit,
+    TeacherSearchService,
+)
 
 __all__ = [
-    "StudentSearchService",
     "StudentSearchHit",
-    "TeacherSearchService",
+    "StudentSearchService",
     "TeacherSearchHit",
+    "TeacherSearchService",
 ]

@@ -9,10 +9,11 @@
 # entity_type + entity_id identify the owning row, e.g.
 #   entity_type="assignment", entity_id=42
 
-from sqlalchemy import Column, Integer, String, LargeBinary
+from sqlalchemy import Column, Integer, LargeBinary, String
 
 from app.api.database import Base
-from app.core.mixins import TimestampMixin, ActiveMixin, AuditMixin
+from app.core.mixins import ActiveMixin, AuditMixin, TimestampMixin
+from app.helpers.code_generators import generate_uuid
 
 
 class Attachment(
@@ -23,12 +24,10 @@ class Attachment(
 ):
     __tablename__ = "attachments"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-
-    attachment_code = Column(String(30), unique=True, nullable=False, index=True)
+    attachment_code = Column(String(30), primary_key=True, default=generate_uuid)
 
     entity_type = Column(String(30), nullable=False, index=True)
-    entity_id = Column(Integer, nullable=False, index=True)
+    entity_id = Column(String(30), nullable=False, index=True)
 
     file_name = Column(String(255), nullable=False)
     mime_type = Column(String(100), nullable=False)

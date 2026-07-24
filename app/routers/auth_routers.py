@@ -2,75 +2,77 @@
 # routers/auth_routers.py - Production Ready Authentication
 # ============================================================
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
-from typing import Optional
-from datetime import datetime, timedelta
 import logging
+from datetime import UTC, datetime, timedelta
+from typing import Annotated
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
 
 from app.api.config import settings
 from app.api.database import get_db
-from app.model import User, StudentProfile, TeacherProfile, AdminProfile
-from app.schemas import (
-    LoginRequest,
-    LoginResponse,
-    RefreshTokenRequest,
-    RefreshTokenResponse,
-    LogoutRequest,
-    ChangePasswordRequest,
-    ForgotPasswordRequest,
-    ResetPasswordRequest,
-    VerifyEmailRequest,
-    ResendOTPRequest,
-    UserResponse,
-    ResponseSchema
-)
 from app.auth import (
+    create_access_token,
+    create_auth_tokens,
+    create_reset_token,
+    generate_otp,
     hash_password,
     verify_password,
-    create_access_token,
-    create_refresh_token,
     verify_refresh_token,
-    verify_access_token,
-    create_reset_token,
     verify_reset_token,
-    generate_otp,
-    create_auth_tokens
 )
-from app.dependencies import get_current_user, require_role
 from app.core.enums import UserRole
-from app.email_services import send_reset_email, send_otp_email, send_verification_email
+from app.dependencies import get_current_user
+from app.email_services import send_otp_email, send_reset_email
+from app.model import AdminProfile, StudentProfile, TeacherProfile, User
+from app.schemas import (
+    ChangePasswordRequest,
+    ForgotPasswordRequest,
+    LoginRequest,
+    LoginResponse,
+    LogoutRequest,
+    RefreshTokenRequest,
+    RefreshTokenResponse,
+    ResendOTPRequest,
+    ResetPasswordRequest,
+    ResponseSchema,
+    UserResponse,
+    VerifyEmailRequest,
+)
 
 # Setup logging
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["Authentication"])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
+router = APIRouter(prefix="/auth", tags=["Authentication"])
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 # ============================================================
 # HELPER FUNCTIONS
 # ============================================================
 
+
 def authenticate_user(db: Session, identifier: str, password: str) -> User:
-    """
-    Authenticate user by email or phone.
-    """
-    user = db.query(User).filter(
-        or_(
-            User.email == identifier.lower().strip(),
-            User.phone == identifier.strip()
+    """Authenticate user by email or phone."""
+    user = (
+        db.query(User)
+        .filter(
+            or_(
+                User.email == identifier.lower().strip(),
+                User.phone == identifier.strip(),
+            ),
         )
-    ).first()
-    
+        .first()
+    )
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     if not verify_password(password, user.password_hash):
         user.failed_login_count += 1
         db.commit()
@@ -79,157 +81,144 @@ def authenticate_user(db: Session, identifier: str, password: str) -> User:
             detail="Invalid credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is disabled"
+            detail="Account is disabled",
         )
-    
+
     if user.is_deleted:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account has been deleted"
+            detail="Account has been deleted",
         )
-    
+
     # Reset failed login count on successful login
     user.failed_login_count = 0
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(UTC)
     user.login_count += 1
     db.commit()
     db.refresh(user)
-    
+
     return user
 
+
 def get_user_profile(db: Session, user: User):
-    """
-    Get user's profile based on role.
-    """
-    profile_data = {
-        "user": UserResponse.model_validate(user)
-    }
-    
+    """Get user's profile based on role."""
+    profile_data = {"user": UserResponse.model_validate(user)}
+
     if user.role == UserRole.STUDENT:
-        profile = db.query(StudentProfile).filter(
-            StudentProfile.user_id == user.id
-        ).first()
+        profile = (
+            db.query(StudentProfile).filter(StudentProfile.user_id == user.id).first()
+        )
         if profile:
             profile_data["profile"] = {
                 "student_id": profile.student_id,
                 "student_name": profile.student_name,
                 "admission_number": profile.admission_number,
-                "profile_photo": profile.profile_photo
+                "profile_photo": profile.profile_photo,
             }
-    
+
     elif user.role == UserRole.TEACHER:
-        profile = db.query(TeacherProfile).filter(
-            TeacherProfile.user_id == user.id
-        ).first()
+        profile = (
+            db.query(TeacherProfile).filter(TeacherProfile.user_id == user.id).first()
+        )
         if profile:
             profile_data["profile"] = {
                 "teacher_id": profile.teacher_id,
                 "teacher_name": profile.teacher_name,
                 "designation": profile.designation,
                 "employee_code": profile.employee_code,
-                "profile_photo": profile.profile_photo
+                "profile_photo": profile.profile_photo,
             }
-    
+
     elif user.role == UserRole.ADMIN:
-        profile = db.query(AdminProfile).filter(
-            AdminProfile.user_id == user.id
-        ).first()
+        profile = db.query(AdminProfile).filter(AdminProfile.user_id == user.id).first()
         if profile:
             profile_data["profile"] = {
                 "admin_id": profile.admin_id,
                 "admin_name": profile.admin_name,
                 "designation": profile.designation,
                 "profile_photo": profile.profile_photo,
-                "super_admin": profile.super_admin
+                "super_admin": profile.super_admin,
             }
-    
+
     return profile_data
+
 
 # ============================================================
 # AUTHENTICATION ENDPOINTS
 # ============================================================
 
+
 @router.post("/login", response_model=LoginResponse)
-async def login(
-    request: LoginRequest,
-    db: Session = Depends(get_db)
-):
-    """
-    Authenticate user and return access token.
-    
+async def login(request: LoginRequest, db: Annotated[Session, Depends(get_db)]):
+    """Authenticate user and return access token.
+
     - **email**: User's email address
     - **password**: User's password
     """
     try:
         user = authenticate_user(db, request.email, request.password)
-        
+
         # Create tokens
-        tokens = create_auth_tokens(
-            user_id=user.id,
-            role=user.role.value
-        )
-        
+        tokens = create_auth_tokens(user_id=user.id, role=user.role.value)
+
         # Get profile data
         profile_data = get_user_profile(db, user)
-        
+
         return {
             "access_token": tokens["access_token"],
             "refresh_token": tokens["refresh_token"],
             "token_type": "bearer",
             "expires_in": 3600,
             "user": UserResponse.model_validate(user),
-            "profile": profile_data.get("profile")
+            "profile": profile_data.get("profile"),
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Login error: {str(e)}")
+        logger.exception("Login error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred during login"
-        )
+            detail="An error occurred during login",
+        ) from e
+
 
 @router.post("/token", include_in_schema=False)
 async def login_oauth2(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    OAuth2 compatible token endpoint for Swagger UI.
-    """
+    """OAuth2 compatible token endpoint for Swagger UI."""
     try:
         user = authenticate_user(db, form_data.username, form_data.password)
-        
-        tokens = create_auth_tokens(
-            user_id=user.id,
-            role=user.role.value
-        )
-        
+
+        tokens = create_auth_tokens(user_id=user.id, role=user.role.value)
+
         return {
             "access_token": tokens["access_token"],
             "token_type": "bearer",
             "expires_in": 3600,
-            "refresh_token": tokens["refresh_token"]
+            "refresh_token": tokens["refresh_token"],
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"OAuth2 login error: {str(e)}")
+        logger.exception("OAuth2 login error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred during login"
-        )
+            detail="An error occurred during login",
+        ) from e
+
 
 @router.post("/refresh", response_model=RefreshTokenResponse)
 async def refresh_access_token(
     request: RefreshTokenRequest,
-    db: Session = Depends(get_db)
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Refresh access token using refresh token."""
     try:
@@ -238,34 +227,33 @@ async def refresh_access_token(
         if not payload:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired refresh token"
+                detail="Invalid or expired refresh token",
             )
 
         user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token payload"
+                detail="Invalid token payload",
             )
 
-        user = db.query(User).filter(User.id == int(user_id)).first()
+        user = db.query(User).filter(User.id == user_id).first()
 
         if not user or not user.is_active or user.is_deleted:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found or inactive"
+                detail="User not found or inactive",
             )
 
-        new_access_token = create_access_token({
-            "sub": str(user.id),
-            "role": user.role.value
-        })
+        new_access_token = create_access_token(
+            {"sub": str(user.id), "role": user.role.value},
+        )
 
         return {
             "access_token": new_access_token,
             "refresh_token": request.refresh_token,
             "token_type": "bearer",
-            "expires_in": 3600
+            "expires_in": 3600,
         }
 
     except HTTPException:
@@ -274,465 +262,433 @@ async def refresh_access_token(
         logger.exception("Refresh token error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while refreshing token: {type(e).__name__}: {str(e)}"
-        )
+            detail=f"An error occurred while refreshing token: {type(e).__name__}: {e!s}",
+        ) from e
+
 
 @router.post("/logout", response_model=ResponseSchema)
 async def logout(
     request: LogoutRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Logout user - clear device token and session.
-    """
+    """Logout user - clear device token and session."""
     try:
         if request.device_token and current_user.device_token == request.device_token:
             current_user.device_token = None
             db.commit()
-        
+
         # If all_devices is True, clear all device tokens for this user
         if request.all_devices:
             current_user.device_token = None
             db.commit()
-        
-        return {
-            "success": True,
-            "message": "Logged out successfully",
-            "data": None
-        }
-        
+
+        return {"success": True, "message": "Logged out successfully", "data": None}
+
     except Exception as e:
-        logger.error(f"Logout error: {str(e)}")
+        logger.exception("Logout error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred during logout"
-        )
+            detail="An error occurred during logout",
+        ) from e
+
 
 # ============================================================
 # PASSWORD MANAGEMENT
 # ============================================================
 
+
 @router.post("/change-password", response_model=ResponseSchema)
 async def change_password(
     request: ChangePasswordRequest,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Change user password.
-    """
+    """Change user password."""
     try:
         # Verify current password
         if not verify_password(request.current_password, current_user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Current password is incorrect"
+                detail="Current password is incorrect",
             )
-        
+
         # Hash and save new password
         current_user.password_hash = hash_password(request.new_password)
-        current_user.password_changed_at = datetime.utcnow()
+        current_user.password_changed_at = datetime.now(UTC)
         db.commit()
-        
+
         return {
             "success": True,
             "message": "Password changed successfully",
-            "data": None
+            "data": None,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Change password error: {str(e)}")
+        logger.exception("Change password error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while changing password"
-        )
+            detail="An error occurred while changing password",
+        ) from e
+
 
 @router.post("/forgot-password", response_model=ResponseSchema)
 async def forgot_password(
     request: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Request password reset - sends reset link to email.
-    """
+    """Request password reset - sends reset link to email."""
     try:
-        user = db.query(User).filter(
-            User.email == request.email.lower().strip()
-        ).first()
-        
+        user = (
+            db.query(User).filter(User.email == request.email.lower().strip()).first()
+        )
+
         # Always return success to prevent email enumeration
         if not user:
             return {
                 "success": True,
                 "message": "If email exists, reset link will be sent",
-                "data": None
+                "data": None,
             }
-        
+
         # Generate reset token
         reset_token = create_reset_token(request.email)
-        
+
         # Send reset email in background
         reset_link = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
         background_tasks.add_task(
             send_reset_email,
             email=request.email,
-            link=reset_link
+            link=reset_link,
         )
-        
+
         return {
             "success": True,
             "message": "Password reset link sent to your email",
-            "data": None
+            "data": None,
         }
-        
+
     except Exception as e:
-        logger.error(f"Forgot password error: {str(e)}")
+        logger.exception("Forgot password error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while processing your request"
-        )
+            detail="An error occurred while processing your request",
+        ) from e
+
 
 @router.post("/reset-password", response_model=ResponseSchema)
 async def reset_password(
-    request: ResetPasswordRequest,
-    db: Session = Depends(get_db)
+    request: ResetPasswordRequest, db: Annotated[Session, Depends(get_db)]
 ):
-    """
-    Reset password using token.
-    """
+    """Reset password using token."""
     try:
         email = verify_reset_token(request.token)
-        
+
         if not email:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid or expired reset token"
+                detail="Invalid or expired reset token",
             )
-        
+
         user = db.query(User).filter(User.email == email).first()
-        
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
+                detail="User not found",
             )
-        
+
         # Update password
         user.password_hash = hash_password(request.new_password)
-        user.password_changed_at = datetime.utcnow()
-        user.last_password_reset = datetime.utcnow()
+        user.password_changed_at = datetime.now(UTC)
+        user.last_password_reset = datetime.now(UTC)
         db.commit()
-        
-        return {
-            "success": True,
-            "message": "Password reset successfully",
-            "data": None
-        }
-        
+
+        return {"success": True, "message": "Password reset successfully", "data": None}
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Reset password error: {str(e)}")
+        logger.exception("Reset password error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while resetting password"
-        )
+            detail="An error occurred while resetting password",
+        ) from e
+
 
 # ============================================================
 # EMAIL VERIFICATION
 # ============================================================
 
+
 @router.post("/send-verification-otp", response_model=ResponseSchema)
 async def send_verification_otp(
     request: ResendOTPRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Send verification OTP to email.
-    """
+    """Send verification OTP to email."""
     try:
-        user = db.query(User).filter(
-            User.email == request.email.lower().strip()
-        ).first()
-        
+        user = (
+            db.query(User).filter(User.email == request.email.lower().strip()).first()
+        )
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
+                detail="User not found",
             )
-        
+
         if user.email_verified:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already verified"
+                detail="Email already verified",
             )
-        
+
         # Generate OTP
         otp = generate_otp(6)
         user.email_otp = otp
-        user.email_otp_expiry = datetime.utcnow() + timedelta(minutes=10)
+        user.email_otp_expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=10)
         db.commit()
-        
+
         # Send OTP email in background
         background_tasks.add_task(
             send_otp_email,
             email=user.email,
             otp=otp,
-            purpose="email_verification"
+            purpose="email_verification",
         )
-        
-        return {
-            "success": True,
-            "message": "OTP sent successfully",
-            "data": None
-        }
-        
+
+        return {"success": True, "message": "OTP sent successfully", "data": None}
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Send verification OTP error: {str(e)}")
+        logger.exception("Send verification OTP error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while sending OTP"
-        )
+            detail="An error occurred while sending OTP",
+        ) from e
+
 
 @router.post("/verify-email", response_model=ResponseSchema)
 async def verify_email(
-    request: VerifyEmailRequest,
-    db: Session = Depends(get_db)
+    request: VerifyEmailRequest, db: Annotated[Session, Depends(get_db)]
 ):
-    """
-    Verify email with OTP.
-    """
+    """Verify email with OTP."""
     try:
-        user = db.query(User).filter(
-            User.email == request.email.lower().strip()
-        ).first()
-        
+        user = (
+            db.query(User).filter(User.email == request.email.lower().strip()).first()
+        )
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
+                detail="User not found",
             )
-        
+
         if user.email_verified:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already verified"
+                detail="Email already verified",
             )
-        
+
         # Check OTP
         if not user.email_otp or user.email_otp != request.otp:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid OTP"
+                detail="Invalid OTP",
             )
-        
-        # Check expiry
-        if user.email_otp_expiry and user.email_otp_expiry < datetime.utcnow():
+
+        # Check expiry (column is offset-naive DateTime)
+        if user.email_otp_expiry and user.email_otp_expiry < datetime.now(UTC).replace(tzinfo=None):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="OTP has expired"
+                detail="OTP has expired",
             )
-        
+
         user.email_verified = True
         user.email_otp = None
         user.email_otp_expiry = None
         db.commit()
-        
-        return {
-            "success": True,
-            "message": "Email verified successfully",
-            "data": None
-        }
-        
+
+        return {"success": True, "message": "Email verified successfully", "data": None}
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Verify email error: {str(e)}")
+        logger.exception("Verify email error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while verifying email"
-        )
+            detail="An error occurred while verifying email",
+        ) from e
+
 
 @router.post("/resend-otp", response_model=ResponseSchema)
 async def resend_otp(
     request: ResendOTPRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Resend verification OTP.
-    """
+    """Resend verification OTP."""
     return await send_verification_otp(request, background_tasks, db)
+
 
 # ============================================================
 # OTP LOGIN (Alternative Login Method)
 # ============================================================
 
+
 @router.post("/send-login-otp", response_model=ResponseSchema)
 async def send_login_otp(
     request: ResendOTPRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Send login OTP to email.
-    """
+    """Send login OTP to email."""
     try:
-        user = db.query(User).filter(
-            User.email == request.email.lower().strip()
-        ).first()
-        
+        user = (
+            db.query(User).filter(User.email == request.email.lower().strip()).first()
+        )
+
         if not user:
             # Return success to prevent email enumeration
             return {
                 "success": True,
                 "message": "If email exists, OTP will be sent",
-                "data": None
+                "data": None,
             }
-        
+
         # Generate OTP
         otp = generate_otp(6)
         user.email_otp = otp
-        user.email_otp_expiry = datetime.utcnow() + timedelta(minutes=10)
+        user.email_otp_expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=10)
         db.commit()
-        
+
         # Send OTP email in background
         background_tasks.add_task(
             send_otp_email,
             email=user.email,
             otp=otp,
-            purpose="login"
+            purpose="login",
         )
-        
-        return {
-            "success": True,
-            "message": "OTP sent successfully",
-            "data": None
-        }
-        
+
+        return {"success": True, "message": "OTP sent successfully", "data": None}
+
     except Exception as e:
-        logger.error(f"Send login OTP error: {str(e)}")
+        logger.exception("Send login OTP error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while sending OTP"
-        )
+            detail="An error occurred while sending OTP",
+        ) from e
+
 
 @router.post("/verify-login-otp", response_model=LoginResponse)
 async def verify_login_otp(
-    request: VerifyEmailRequest,
-    db: Session = Depends(get_db)
+    request: VerifyEmailRequest, db: Annotated[Session, Depends(get_db)]
 ):
-    """
-    Verify login OTP and get access token.
-    """
+    """Verify login OTP and get access token."""
     try:
-        user = db.query(User).filter(
-            User.email == request.email.lower().strip()
-        ).first()
-        
+        user = (
+            db.query(User).filter(User.email == request.email.lower().strip()).first()
+        )
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
+                detail="User not found",
             )
-        
+
         # Check OTP
         if not user.email_otp or user.email_otp != request.otp:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid OTP"
+                detail="Invalid OTP",
             )
-        
-        # Check expiry
-        if user.email_otp_expiry and user.email_otp_expiry < datetime.utcnow():
+
+        # Check expiry (column is offset-naive DateTime)
+        if user.email_otp_expiry and user.email_otp_expiry < datetime.now(UTC).replace(tzinfo=None):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="OTP has expired"
+                detail="OTP has expired",
             )
-        
+
         # Clear OTP
         user.email_otp = None
         user.email_otp_expiry = None
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(UTC).replace(tzinfo=None)
         user.login_count += 1
         db.commit()
-        
+
         # Create tokens
-        tokens = create_auth_tokens(
-            user_id=user.id,
-            role=user.role.value
-        )
-        
+        tokens = create_auth_tokens(user_id=user.id, role=user.role.value)
+
         # Get profile data
         profile_data = get_user_profile(db, user)
-        
+
         return {
             "access_token": tokens["access_token"],
             "refresh_token": tokens["refresh_token"],
             "token_type": "bearer",
             "expires_in": 3600,
             "user": UserResponse.model_validate(user),
-            "profile": profile_data.get("profile")
+            "profile": profile_data.get("profile"),
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Verify login OTP error: {str(e)}")
+        logger.exception("Verify login OTP error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred during OTP verification"
-        )
+            detail="An error occurred during OTP verification",
+        ) from e
+
 
 # ============================================================
 # TOKEN VALIDATION
 # ============================================================
 
+
 @router.get("/validate-token", response_model=ResponseSchema)
 async def validate_token(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Validate current access token and return user info.
-    """
+    """Validate current access token and return user info."""
     try:
         profile_data = get_user_profile(db, current_user)
-        
+
         return {
             "success": True,
             "message": "Token is valid",
             "data": {
                 "user": UserResponse.model_validate(current_user),
-                "profile": profile_data.get("profile")
-            }
+                "profile": profile_data.get("profile"),
+            },
         }
-        
+
     except Exception as e:
-        logger.error(f"Validate token error: {str(e)}")
+        logger.exception("Validate token error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while validating token"
-        )
+            detail="An error occurred while validating token",
+        ) from e
+
 
 # ============================================================
 # HEALTH CHECK
 # ============================================================
 
+
 @router.get("/health")
 async def auth_health_check():
-    """
-    Authentication service health check.
-    """
+    """Authentication service health check."""
     return {
         "status": "healthy",
         "service": "authentication",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(UTC).isoformat(),
     }

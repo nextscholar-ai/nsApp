@@ -1,4 +1,5 @@
-import os
+from pathlib import Path
+
 from PIL import Image
 
 
@@ -7,7 +8,7 @@ def generate_qr_image(data: str, output_path: str) -> str:
 
     Uses `qrcode` if available; otherwise creates a placeholder image.
     """
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     try:
         import qrcode
@@ -29,4 +30,3 @@ def generate_qr_image(data: str, output_path: str) -> str:
         # no-op placeholder; client can still download/view pdf
         img.save(output_path)
         return output_path
-

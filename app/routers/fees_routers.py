@@ -116,12 +116,12 @@
 # )
 # def update_fee(
 
-#     fee_id: int,
+#     fee_id: str,
 
 #     data: FeeUpdate,
 #     teacher=Depends(
 #         get_current_teacher
-#     ),  
+#     ),
 #     db: Session = Depends(get_db)
 
 # ):
@@ -258,7 +258,7 @@
 # )
 # def fee_detail(
 
-#     fee_id: int,
+#     fee_id: str,
 
 #     student: StudentProfile = Depends(
 #         get_current_student
@@ -311,27 +311,23 @@
 # routers/fees_routers.py - Fee Routes
 # ============================================================
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
-from typing import List, Optional
 from decimal import Decimal
-from datetime import date
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
 from app.api.database import get_db
-from app.model import User, Fee, StudentClass, StudentProfile
+from app.core.enums import FeeStatus, UserRole
+from app.dependencies import get_current_user, require_role
+from app.model import Fee, StudentClass, StudentProfile, User
 from app.schemas import (
-    FeeResponse,
     FeeCreate,
-    FeeUpdate,
-    FeePaymentResponse,
     FeePaymentCreate,
-    FeeSummaryResponse
+    FeeResponse,
+    FeeSummaryResponse,
+    FeeUpdate,
 )
-from app.dependencies import (
-    get_current_user,
-    require_role
-)
-from app.core.enums import UserRole, FeeStatus
 
 router = APIRouter(prefix="/fees", tags=["Fees"])
 
@@ -339,39 +335,44 @@ router = APIRouter(prefix="/fees", tags=["Fees"])
 # FEE CRUD
 # ============================================================
 
+
 @router.post("/", response_model=FeeResponse)
 async def create_fee(
     fee_data: FeeCreate,
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
-    db: Session = Depends(get_db)
+    current_user: Annotated[User, Depends(require_role(UserRole.ADMIN))],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Create a new fee record.
-    """
+    """Create a new fee record."""
     # Check if student exists
-    student_class = db.query(StudentClass).filter(
-        StudentClass.id == fee_data.student_class_id
-    ).first()
-    
+    student_class = (
+        db.query(StudentClass)
+        .filter(StudentClass.id == fee_data.student_class_id)
+        .first()
+    )
+
     if not student_class:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student class record not found"
+            detail="Student class record not found",
         )
-    
+
     # Check if fee already exists for this month
-    existing = db.query(Fee).filter(
-        Fee.student_class_id == fee_data.student_class_id,
-        Fee.fee_month == fee_data.fee_month,
-        Fee.fee_year == fee_data.fee_year
-    ).first()
-    
+    existing = (
+        db.query(Fee)
+        .filter(
+            Fee.student_class_id == fee_data.student_class_id,
+            Fee.fee_month == fee_data.fee_month,
+            Fee.fee_year == fee_data.fee_year,
+        )
+        .first()
+    )
+
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Fee already exists for {fee_data.fee_month}/{fee_data.fee_year}"
+            detail=f"Fee already exists for {fee_data.fee_month}/{fee_data.fee_year}",
         )
-    
+
     from app.helpers.code_generators import generate_fee_code
 
     new_fee = Fee(
@@ -388,163 +389,187 @@ async def create_fee(
         paid_date=fee_data.paid_date,
         status=fee_data.status,
         remarks=fee_data.remarks,
-        created_by=current_user.id
+        created_by=current_user.id,
     )
-    
+
     db.add(new_fee)
     db.commit()
     db.refresh(new_fee)
-    
+
     return FeeResponse.model_validate(new_fee)
 
-@router.get("/", response_model=List[FeeResponse])
+
+@router.get("/", response_model=list[FeeResponse])
 async def get_fees(
-    student_class_id: Optional[int] = None,
-    status: Optional[FeeStatus] = None,
-    fee_month: Optional[int] = None,
-    fee_year: Optional[int] = None,
+    student_class_id: str | None = None,
+    status: FeeStatus | None = None,
+    fee_month: int | None = None,
+    fee_year: int | None = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """
-    Get fees with filters.
-    """
+    """Get fees with filters."""
     query = db.query(Fee)
-    
+
     if student_class_id:
         query = query.filter(Fee.student_class_id == student_class_id)
     elif current_user.role == UserRole.STUDENT:
         # For students, only show their fees
-        student = db.query(StudentProfile).filter(
-            StudentProfile.user_id == current_user.id
-        ).first()
+        student = (
+            db.query(StudentProfile)
+            .filter(StudentProfile.user_id == current_user.id)
+            .first()
+        )
         if student:
-            student_class = db.query(StudentClass).filter(
-                StudentClass.student_id == student.student_id
-            ).first()
+            student_class = (
+                db.query(StudentClass)
+                .filter(StudentClass.student_id == student.student_id)
+                .first()
+            )
             if student_class:
                 query = query.filter(Fee.student_class_id == student_class.id)
-    
+
     if status:
         query = query.filter(Fee.status == status)
-    
+
     if fee_month:
         query = query.filter(Fee.fee_month == fee_month)
-    
+
     if fee_year:
         query = query.filter(Fee.fee_year == fee_year)
-    
+
     fees = query.order_by(Fee.fee_year.desc(), Fee.fee_month.desc()).all()
     return [FeeResponse.model_validate(f) for f in fees]
 
+
 @router.get("/{fee_id}", response_model=FeeResponse)
 async def get_fee(
-    fee_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    fee_id: str,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Get fee by ID.
-    """
+    """Get fee by ID."""
     fee = db.query(Fee).filter(Fee.id == fee_id).first()
     if not fee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Fee record not found"
+            detail="Fee record not found",
         )
     return FeeResponse.model_validate(fee)
 
+
 @router.put("/{fee_id}", response_model=FeeResponse)
 async def update_fee(
-    fee_id: int,
+    fee_id: str,
     fee_data: FeeUpdate,
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
-    db: Session = Depends(get_db)
+    current_user: Annotated[User, Depends(require_role(UserRole.ADMIN))],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Update fee record.
-    """
+    """Update fee record."""
     fee = db.query(Fee).filter(Fee.id == fee_id).first()
     if not fee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Fee record not found"
+            detail="Fee record not found",
         )
-    
-    for key, value in fee_data.dict(exclude_unset=True).items():
+
+    for key, value in fee_data.model_dump(exclude_unset=True).items():
         setattr(fee, key, value)
-    
+
     fee.updated_by = current_user.id
     db.commit()
     db.refresh(fee)
-    
+
     return FeeResponse.model_validate(fee)
+
+
+@router.delete("/{fee_id}")
+async def delete_fee(
+    fee_id: str,
+    current_user: Annotated[User, Depends(require_role(UserRole.ADMIN))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Delete a fee record."""
+    fee = db.query(Fee).filter(Fee.id == fee_id).first()
+    if not fee:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Fee record not found",
+        )
+    db.delete(fee)
+    db.commit()
+    return {"success": True, "message": "Fee record deleted"}
+
 
 # ============================================================
 # FEE PAYMENT
 # ============================================================
 
+
 @router.post("/{fee_id}/pay", response_model=FeeResponse)
 async def pay_fee(
-    fee_id: int,
+    fee_id: str,
     payment_data: FeePaymentCreate,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Pay a fee.
-    """
+    """Pay a fee."""
     fee = db.query(Fee).filter(Fee.id == fee_id).first()
     if not fee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Fee record not found"
+            detail="Fee record not found",
         )
-    
+
     # For students, check if fee belongs to them
     if current_user.role == UserRole.STUDENT:
-        student = db.query(StudentProfile).filter(
-            StudentProfile.user_id == current_user.id
-        ).first()
+        student = (
+            db.query(StudentProfile)
+            .filter(StudentProfile.user_id == current_user.id)
+            .first()
+        )
         if student:
-            student_class = db.query(StudentClass).filter(
-                StudentClass.student_id == student.student_id
-            ).first()
+            student_class = (
+                db.query(StudentClass)
+                .filter(StudentClass.student_id == student.student_id)
+                .first()
+            )
             if not student_class or fee.student_class_id != student_class.id:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You can only pay your own fees"
+                    detail="You can only pay your own fees",
                 )
-    
+
     # Update fee
     fee.paid_amount += Decimal(str(payment_data.amount_paid))
     fee.paid_date = payment_data.payment_date
-    
+
     # Update status
     if fee.paid_amount >= fee.total_amount + fee.fine_amount - fee.discount_amount:
         fee.status = FeeStatus.PAID
     elif fee.paid_amount > 0:
         fee.status = FeeStatus.PENDING
-    
+
     fee.updated_by = current_user.id
     db.commit()
     db.refresh(fee)
-    
+
     return FeeResponse.model_validate(fee)
+
 
 # ============================================================
 # FEE SUMMARY
 # ============================================================
 
+
 @router.get("/summary/student/{student_id}", response_model=FeeSummaryResponse)
 async def get_student_fee_summary(
     student_id: str,
-    academic_sessions_id: int,
-    current_user: User = Depends(require_role(UserRole.ADMIN)),
-    db: Session = Depends(get_db)
+    academic_sessions_id: str,
+    current_user: Annotated[User, Depends(require_role(UserRole.ADMIN))],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """
-    Get fee summary for a student.
+    """Get fee summary for a student.
 
     `student_id` path segment ab student_id, email, ya naam - teeno
     accept karta hai. Naam se 1 se zyada student match ho to 409 milta
@@ -556,36 +581,40 @@ async def get_student_fee_summary(
     student = IdentifierResolverService(db).resolve_student(student_id)
     student_id = student.student_id  # normalize to the real business id
 
-    student_class = db.query(StudentClass).filter(
-        StudentClass.student_id == student_id,
-        StudentClass.academic_sessions_id == academic_sessions_id
-    ).first()
-    
+    student_class = (
+        db.query(StudentClass)
+        .filter(
+            StudentClass.student_id == student_id,
+            StudentClass.academic_sessions_id == academic_sessions_id,
+        )
+        .first()
+    )
+
     if not student_class:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student not enrolled in this session"
+            detail="Student not enrolled in this session",
         )
-    
-    fees = db.query(Fee).filter(
-        Fee.student_class_id == student_class.id
-    ).all()
-    
+
+    fees = db.query(Fee).filter(Fee.student_class_id == student_class.id).all()
+
     total = sum(f.total_amount for f in fees)
     paid = sum(f.paid_amount for f in fees)
     discount = sum(f.discount_amount for f in fees)
     fine = sum(f.fine_amount for f in fees)
-    
+
     pending = total - paid
-    
+
     return {
         "student_id": student_id,
         "student_name": student.student_name,
-        "classroom": student_class.classroom.display_name if student_class.classroom else "",
+        "classroom": student_class.classroom.display_name
+        if student_class.classroom
+        else "",
         "total_fee": float(total),
         "paid_fee": float(paid),
         "pending_fee": float(pending),
         "discount_fee": float(discount),
         "fine_fee": float(fine),
-        "status": "Paid" if pending == 0 else "Pending"
+        "status": "Paid" if pending == 0 else "Pending",
     }

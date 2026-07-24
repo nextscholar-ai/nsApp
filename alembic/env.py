@@ -1,8 +1,8 @@
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
-from alembic import context
 
+from alembic import context
 from app.api.config import settings
 from app.api.database import Base
 
@@ -45,7 +45,6 @@ def run_migrations_online():
     )
 
     with connectable.connect() as connection:
-
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

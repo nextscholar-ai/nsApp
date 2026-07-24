@@ -1,22 +1,22 @@
 # app/helpers/date_utils.py
 
-from datetime import datetime, date, timedelta
-from typing import Optional
+from datetime import UTC, date, datetime, timedelta
+
 
 class DateUtils:
     @staticmethod
     def get_current_academic_year():
-        current_year = datetime.now().year
-        current_month = datetime.now().month
-        
+        current_year = datetime.now(UTC).year
+        current_month = datetime.now(UTC).month
+
         if current_month >= 4:  # April to December
             return current_year, current_year + 1
-        else:  # January to March
-            return current_year - 1, current_year
+        # January to March
+        return current_year - 1, current_year
 
     @staticmethod
     def get_age_from_dob(dob: date) -> int:
-        today = date.today()
+        today = datetime.now(UTC).date()
         return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
     @staticmethod
@@ -25,7 +25,15 @@ class DateUtils:
 
     @staticmethod
     def get_day_of_week(date_obj: date) -> str:
-        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        days = [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+        ]
         return days[date_obj.weekday()]
 
     @staticmethod
